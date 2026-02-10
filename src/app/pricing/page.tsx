@@ -1,13 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/database/supabase-client'
 import Link from 'next/link'
 
 export default function PricingPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const [loading, setLoading] = useState<string | null>(null)
   const [user, setUser] = useState<any>(null)
   const [promoCode, setPromoCode] = useState('')
