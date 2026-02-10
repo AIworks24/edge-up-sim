@@ -87,8 +87,11 @@ export default function RegisterPage() {
           })
         })
 
+        const result = await response.json()
+
         if (!response.ok) {
-          throw new Error('Failed to create profile')
+          console.error('Profile creation failed:', result)
+          throw new Error(result.error || result.details || 'Failed to create profile')
         }
       }
 
