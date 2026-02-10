@@ -1,0 +1,20 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/fetch-events",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/update-scores",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/generate-hot-picks",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/reset-simulations",
+      "schedule": "0 * * * *"
+    }
+  ]
+}
