@@ -3,354 +3,435 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/database/supabase-client'
+import Link from 'next/link'
+import { 
+  ArrowLeft,
+  Zap,
+  ChevronDown,
+  TrendingUp,
+  Target,
+  Calendar,
+  AlertCircle,
+  Loader2,
+  CheckCircle2
+} from 'lucide-react'
 
-interface Event {
+interface Game {
   id: string
-  sport_title: string
   home_team: string
   away_team: string
+  sport_title: string
   commence_time: string
+  odds_data: any
 }
 
 export default function SimulatePage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
   const [profile, setProfile] = useState<any>(null)
-  const [events, setEvents] = useState<Event[]>([])
-  const [selectedEvent, setSelectedEvent] = useState<string>('')
-  const [betType, setBetType] = useState<'moneyline' | 'spread' | 'total'>('moneyline')
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
+  
+  // Step 1: Sport Selection
+  const [selectedSport, setSelectedSport] = useState<string>('')
+  
+  // Step 2: Game Selection
+  const [availableGames, setAvailableGames] = useState<Game[]>([])
+  const [selectedGame, setSelectedGame] = useState<Game | null>(null)
+  const [loadingGames, setLoadingGames] = useState(false)
+  
+  // Step 3: Bet Type Selection
+  const [selectedBetType, setSelectedBetType] = useState<string>('')
+  
+  // Step 4: Running Simulation
+  const [simulating, setSimulating] = useState(false)
   const [prediction, setPrediction] = useState<any>(null)
+  const [error, setError] = useState('')
+
+  const sports = [
+    { key: 'nfl', name: 'NFL', icon: '🏈', description: 'National Football League' },
+    { key: 'nba', name: 'NBA', icon: '🏀', description: 'National Basketball Association' },
+    { key: 'ncaaf', name: 'NCAA Football', icon: '🏈', description: 'College Football' },
+    { key: 'ncaab', name: 'NCAA Basketball', icon: '🏀', description: 'College Basketball' },
+    { key: 'mlb', name: 'MLB', icon: '⚾', description: 'Major League Baseball' },
+    { key: 'nhl', name: 'NHL', icon: '🏒', description: 'National Hockey League' }
+  ]
+
+  const betTypes = [
+    { key: 'moneyline', name: 'Moneyline', description: 'Pick the winner' },
+    { key: 'spread', name: 'Point Spread', description: 'Win by margin' },
+    { key: 'total', name: 'Over/Under', description: 'Total points scored' }
+  ]
 
   useEffect(() => {
-    checkUser()
+    checkAuth()
   }, [])
 
-  async function checkUser() {
-    const { data: { session } } = await supabase.auth.getSession()
-    
-    if (!session) {
+  useEffect(() => {
+    if (selectedSport) {
+      loadGames()
+    }
+  }, [selectedSport])
+
+  const checkAuth = async () => {
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+      if (!authUser) {
+        router.push('/login')
+        return
+      }
+      setUser(authUser)
+
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authUser.id)
+        .single()
+
+      setProfile(profileData)
+      setLoading(false)
+    } catch (error) {
+      console.error('Auth error:', error)
       router.push('/login')
-      return
-    }
-
-    setUser(session.user)
-    await loadProfile(session.user.id)
-    await loadEvents()
-  }
-
-  async function loadProfile(userId: string) {
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
-
-    if (data) {
-      setProfile(data)
     }
   }
 
-  async function loadEvents() {
-    const { data } = await supabase
-      .from('sports_events')
-      .select('*')
-      .eq('event_status', 'upcoming')
-      .order('commence_time', { ascending: true })
-      .limit(50)
+  const loadGames = async () => {
+    setLoadingGames(true)
+    setError('')
+    
+    try {
+      // Fetch upcoming games for selected sport
+      const { data: games, error: gamesError } = await supabase
+        .from('sports_events')
+        .select('*')
+        .eq('sport_key', selectedSport)
+        .eq('event_status', 'upcoming')
+        .gte('commence_time', new Date().toISOString())
+        .order('commence_time', { ascending: true })
+        .limit(20)
 
-    if (data) {
-      setEvents(data)
+      if (gamesError) throw gamesError
+
+      if (!games || games.length === 0) {
+        setError(`No upcoming ${selectedSport.toUpperCase()} games found. This could mean the sports data hasn't been loaded yet. Please try another sport or check back later.`)
+        setAvailableGames([])
+      } else {
+        setAvailableGames(games)
+      }
+    } catch (error: any) {
+      console.error('Error loading games:', error)
+      setError('Failed to load games. Please try again.')
+    } finally {
+      setLoadingGames(false)
     }
   }
 
-  async function handleSimulate() {
-    if (!selectedEvent) {
-      alert('Please select a game')
-      return
-    }
+  const runSimulation = async () => {
+    if (!selectedGame || !selectedBetType) return
 
     // Check simulation limits
-    if (profile.daily_simulation_count >= profile.daily_simulation_limit) {
-      alert('Daily simulation limit reached. Upgrade your plan for more simulations.')
+    const dailyLimit = profile?.daily_simulation_limit || 3
+    const currentCount = profile?.daily_simulation_count || 0
+    const rollover = profile?.monthly_simulation_rollover || 0
+
+    if (currentCount >= dailyLimit + rollover) {
+      setError(`You've reached your daily simulation limit (${dailyLimit} + ${rollover} rollover). Upgrade your plan for more simulations.`)
       return
     }
 
-    setLoading(true)
+    setSimulating(true)
+    setError('')
     setPrediction(null)
 
     try {
+      // Call API to generate prediction
       const response = await fetch('/api/predictions/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          eventId: selectedEvent,
-          sport: events.find(e => e.id === selectedEvent)?.sport_title || 'nfl',
-          betType,
+          eventId: selectedGame.id,
+          betType: selectedBetType,
           userId: user.id
         })
       })
 
-      const data = await response.json()
+      const result = await response.json()
 
-      if (response.ok) {
-        setPrediction(data)
-        
-        // Update simulation count
-        await supabase
-          .from('profiles')
-          .update({
-            daily_simulation_count: profile.daily_simulation_count + 1,
-            monthly_simulation_count: profile.monthly_simulation_count + 1
-          })
-          .eq('id', user.id)
-
-        // Reload profile
-        await loadProfile(user.id)
-      } else {
-        throw new Error(data.error || 'Failed to generate prediction')
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to generate prediction')
       }
+
+      setPrediction(result.prediction)
+
+      // Refresh profile to update simulation count
+      const { data: updatedProfile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single()
+
+      if (updatedProfile) {
+        setProfile(updatedProfile)
+      }
+
     } catch (error: any) {
-      alert('Error: ' + error.message)
+      console.error('Simulation error:', error)
+      setError(error.message || 'Failed to run simulation. Please try again.')
     } finally {
-      setLoading(false)
+      setSimulating(false)
     }
   }
 
-  if (!profile) {
+  const resetForm = () => {
+    setSelectedSport('')
+    setSelectedGame(null)
+    setSelectedBetType('')
+    setPrediction(null)
+    setError('')
+    setAvailableGames([])
+  }
+
+  if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center">
+        <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
       {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold text-gray-900">Run Simulation</h1>
-            <button
-              onClick={() => router.push('/dashboard')}
-              className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
-            >
-              Back to Dashboard
-            </button>
+      <header className="bg-slate-900/50 backdrop-blur-xl border-b border-white/10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <Link href="/dashboard" className="flex items-center space-x-2 text-gray-300 hover:text-white transition">
+              <ArrowLeft className="w-5 h-5" />
+              <span className="font-medium">Back to Dashboard</span>
+            </Link>
+            <div className="text-right">
+              <div className="text-sm text-gray-400">Simulations Today</div>
+              <div className="text-white font-bold">
+                {profile?.daily_simulation_count || 0} / {profile?.daily_simulation_limit || 3}
+                {(profile?.monthly_simulation_rollover || 0) > 0 && (
+                  <span className="text-green-400"> +{profile.monthly_simulation_rollover}</span>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-        {/* Limits Display */}
-        <div className="mb-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <div className="flex justify-between items-center">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Title */}
+        <div className="text-center mb-12">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl mb-4 shadow-lg shadow-blue-500/50">
+            <Zap className="w-8 h-8 text-white" />
+          </div>
+          <h1 className="text-4xl font-black text-white mb-2">Run Custom Simulation</h1>
+          <p className="text-gray-400 text-lg">Select a game and bet type to get AI-powered predictions</p>
+        </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="mb-8 bg-red-500/10 border border-red-500/20 rounded-xl p-4 flex items-start space-x-3">
+            <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="font-semibold text-blue-900">
-                Daily Simulations: {profile.daily_simulation_count}/{profile.daily_simulation_limit}
-              </p>
-              {profile.monthly_simulation_rollover > 0 && (
-                <p className="text-sm text-blue-700">
-                  +{profile.monthly_simulation_rollover} rollover available
-                </p>
-              )}
+              <div className="text-red-400 font-semibold">Error</div>
+              <div className="text-red-300 text-sm">{error}</div>
             </div>
+          </div>
+        )}
+
+        {/* Prediction Result */}
+        {prediction && (
+          <div className="mb-8 bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/20 rounded-2xl p-8">
+            <div className="flex items-center space-x-3 mb-6">
+              <CheckCircle2 className="w-8 h-8 text-green-400" />
+              <h2 className="text-2xl font-bold text-white">Prediction Generated</h2>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+              <div className="bg-white/5 rounded-xl p-4">
+                <div className="text-sm text-gray-400 mb-1">Confidence</div>
+                <div className="text-3xl font-bold text-white">{prediction.confidence_score}%</div>
+              </div>
+              <div className="bg-white/5 rounded-xl p-4">
+                <div className="text-sm text-gray-400 mb-1">Edge Score</div>
+                <div className="text-3xl font-bold text-green-400">+{prediction.edge_score.toFixed(1)}%</div>
+              </div>
+              <div className="bg-white/5 rounded-xl p-4">
+                <div className="text-sm text-gray-400 mb-1">Recommended</div>
+                <div className="text-lg font-bold text-white">{prediction.recommended_bet_type}</div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <div className="text-sm font-semibold text-gray-400 mb-2">AI Analysis</div>
+                <div className="text-white leading-relaxed">{prediction.ai_analysis}</div>
+              </div>
+
+              <div>
+                <div className="text-sm font-semibold text-gray-400 mb-2">Key Factors</div>
+                <ul className="space-y-2">
+                  {prediction.key_factors?.map((factor: string, index: number) => (
+                    <li key={index} className="flex items-start space-x-2 text-white">
+                      <span className="text-blue-400 mt-1">•</span>
+                      <span>{factor}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div>
+                <div className="text-sm font-semibold text-gray-400 mb-2">Risk Assessment</div>
+                <div className="text-orange-300">{prediction.risk_assessment}</div>
+              </div>
+            </div>
+
             <button
-              onClick={() => router.push('/pricing')}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
+              onClick={resetForm}
+              className="mt-6 w-full py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl font-semibold transition"
             >
-              Upgrade Plan
+              Run Another Simulation
             </button>
           </div>
-        </div>
+        )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Selection Panel */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-bold mb-6">Select Game & Bet Type</h2>
-
-            <div className="space-y-6">
-              {/* Game Selection */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Select Game
-                </label>
-                <select
-                  value={selectedEvent}
-                  onChange={(e) => setSelectedEvent(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Choose a game...</option>
-                  {events.map((event) => (
-                    <option key={event.id} value={event.id}>
-                      {event.sport_title}: {event.away_team} @ {event.home_team} - {new Date(event.commence_time).toLocaleDateString()}
-                    </option>
-                  ))}
-                </select>
+        {/* Simulation Form */}
+        {!prediction && (
+          <div className="space-y-8">
+            {/* Step 1: Select Sport */}
+            <div className="bg-slate-800/50 backdrop-blur-xl border border-white/10 rounded-2xl p-8">
+              <div className="flex items-center space-x-3 mb-6">
+                <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold">1</div>
+                <h2 className="text-2xl font-bold text-white">Select Sport</h2>
               </div>
 
-              {/* Bet Type Selection */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Bet Type
-                </label>
-                <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                {sports.map((sport) => (
                   <button
-                    onClick={() => setBetType('moneyline')}
-                    className={`py-3 px-4 rounded-lg font-medium transition-colors ${
-                      betType === 'moneyline'
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    key={sport.key}
+                    onClick={() => {
+                      setSelectedSport(sport.key)
+                      setSelectedGame(null)
+                      setSelectedBetType('')
+                    }}
+                    className={`p-6 rounded-xl border-2 transition ${
+                      selectedSport === sport.key
+                        ? 'border-blue-500 bg-blue-500/10'
+                        : 'border-white/10 bg-white/5 hover:border-white/20'
                     }`}
                   >
-                    Moneyline
+                    <div className="text-4xl mb-2">{sport.icon}</div>
+                    <div className="text-white font-bold text-lg">{sport.name}</div>
+                    <div className="text-gray-400 text-sm">{sport.description}</div>
                   </button>
-                  <button
-                    onClick={() => setBetType('spread')}
-                    className={`py-3 px-4 rounded-lg font-medium transition-colors ${
-                      betType === 'spread'
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    Spread
-                  </button>
-                  <button
-                    onClick={() => setBetType('total')}
-                    className={`py-3 px-4 rounded-lg font-medium transition-colors ${
-                      betType === 'total'
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    Total
-                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Step 2: Select Game */}
+            {selectedSport && (
+              <div className="bg-slate-800/50 backdrop-blur-xl border border-white/10 rounded-2xl p-8">
+                <div className="flex items-center space-x-3 mb-6">
+                  <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold">2</div>
+                  <h2 className="text-2xl font-bold text-white">Select Game</h2>
+                </div>
+
+                {loadingGames ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+                    <span className="ml-3 text-gray-400">Loading games...</span>
+                  </div>
+                ) : availableGames.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Calendar className="w-16 h-16 text-gray-500 mx-auto mb-4" />
+                    <p className="text-gray-400">No upcoming games available</p>
+                    <p className="text-gray-500 text-sm mt-2">Try selecting a different sport</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {availableGames.map((game) => (
+                      <button
+                        key={game.id}
+                        onClick={() => {
+                          setSelectedGame(game)
+                          setSelectedBetType('')
+                        }}
+                        className={`w-full p-6 rounded-xl border-2 transition text-left ${
+                          selectedGame?.id === game.id
+                            ? 'border-blue-500 bg-blue-500/10'
+                            : 'border-white/10 bg-white/5 hover:border-white/20'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="text-sm text-gray-400 mb-1">{game.sport_title}</div>
+                            <div className="text-white font-bold text-lg">{game.away_team} @ {game.home_team}</div>
+                            <div className="text-gray-400 text-sm mt-1">
+                              {new Date(game.commence_time).toLocaleString()}
+                            </div>
+                          </div>
+                          <ChevronDown className={`w-5 h-5 text-gray-400 transition ${selectedGame?.id === game.id ? 'rotate-180' : ''}`} />
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Step 3: Select Bet Type */}
+            {selectedGame && (
+              <div className="bg-slate-800/50 backdrop-blur-xl border border-white/10 rounded-2xl p-8">
+                <div className="flex items-center space-x-3 mb-6">
+                  <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold">3</div>
+                  <h2 className="text-2xl font-bold text-white">Select Bet Type</h2>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {betTypes.map((bet) => (
+                    <button
+                      key={bet.key}
+                      onClick={() => setSelectedBetType(bet.key)}
+                      className={`p-6 rounded-xl border-2 transition ${
+                        selectedBetType === bet.key
+                          ? 'border-blue-500 bg-blue-500/10'
+                          : 'border-white/10 bg-white/5 hover:border-white/20'
+                      }`}
+                    >
+                      <div className="text-white font-bold text-lg mb-1">{bet.name}</div>
+                      <div className="text-gray-400 text-sm">{bet.description}</div>
+                    </button>
+                  ))}
                 </div>
               </div>
+            )}
 
-              {/* Run Button */}
+            {/* Run Simulation Button */}
+            {selectedGame && selectedBetType && (
               <button
-                onClick={handleSimulate}
-                disabled={loading || !selectedEvent}
-                className="w-full py-4 px-6 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold rounded-lg hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                onClick={runSimulation}
+                disabled={simulating}
+                className="w-full py-6 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 disabled:from-gray-600 disabled:to-gray-700 text-white rounded-2xl font-bold text-xl transition shadow-2xl shadow-blue-500/50 flex items-center justify-center space-x-3"
               >
-                {loading ? (
-                  <span className="flex items-center justify-center">
-                    <svg className="animate-spin h-5 w-5 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Analyzing Game...
-                  </span>
+                {simulating ? (
+                  <>
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                    <span>Generating Prediction...</span>
+                  </>
                 ) : (
-                  'Run AI Simulation'
+                  <>
+                    <Zap className="w-6 h-6" />
+                    <span>Run AI Simulation</span>
+                  </>
                 )}
               </button>
-
-              <p className="text-xs text-gray-500 text-center">
-                AI analysis takes 10-15 seconds • Uses 1 simulation credit
-              </p>
-            </div>
-          </div>
-
-          {/* Results Panel */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-bold mb-6">AI Prediction</h2>
-
-            {!prediction && !loading && (
-              <div className="text-center py-12">
-                <div className="text-gray-400 text-5xl mb-4">🤖</div>
-                <p className="text-gray-600">
-                  Select a game and bet type, then run the simulation to get your AI-powered prediction
-                </p>
-              </div>
-            )}
-
-            {loading && (
-              <div className="text-center py-12">
-                <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto mb-4"></div>
-                <p className="text-gray-600">AI analyzing game data...</p>
-              </div>
-            )}
-
-            {prediction && (
-              <div className="space-y-6">
-                {/* Confidence & Edge */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-green-50 rounded-lg p-4">
-                    <p className="text-sm text-green-700 mb-1">Confidence</p>
-                    <p className="text-3xl font-bold text-green-900">
-                      {prediction.confidenceScore}%
-                    </p>
-                  </div>
-                  <div className="bg-blue-50 rounded-lg p-4">
-                    <p className="text-sm text-blue-700 mb-1">Edge Score</p>
-                    <p className="text-3xl font-bold text-blue-900">
-                      +{prediction.edgeScore.toFixed(1)}%
-                    </p>
-                  </div>
-                </div>
-
-                {/* Recommendation */}
-                <div className="border-l-4 border-blue-600 pl-4">
-                  <p className="text-sm text-gray-600 mb-1">Recommended Bet</p>
-                  <p className="text-xl font-bold text-gray-900">
-                    {prediction.recommendedLine}
-                  </p>
-                </div>
-
-                {/* Key Factors */}
-                <div>
-                  <p className="font-semibold text-gray-900 mb-3">Key Factors:</p>
-                  <ul className="space-y-2">
-                    {prediction.keyFactors?.map((factor: string, idx: number) => (
-                      <li key={idx} className="flex items-start">
-                        <span className="text-blue-600 mr-2">•</span>
-                        <span className="text-gray-700">{factor}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                {/* Analysis */}
-                <div>
-                  <p className="font-semibold text-gray-900 mb-3">Detailed Analysis:</p>
-                  <p className="text-gray-700 leading-relaxed">
-                    {prediction.aiAnalysis}
-                  </p>
-                </div>
-
-                {/* Risk */}
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                  <p className="font-semibold text-red-900 mb-2">⚠️ Risk Assessment:</p>
-                  <p className="text-red-800 text-sm">
-                    {prediction.riskAssessment}
-                  </p>
-                </div>
-
-                {/* Actions */}
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => {
-                      setPrediction(null)
-                      setSelectedEvent('')
-                    }}
-                    className="flex-1 py-2 px-4 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
-                  >
-                    New Simulation
-                  </button>
-                  <button
-                    onClick={() => router.push('/history')}
-                    className="flex-1 py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                  >
-                    View History
-                  </button>
-                </div>
-              </div>
             )}
           </div>
-        </div>
+        )}
       </main>
     </div>
   )

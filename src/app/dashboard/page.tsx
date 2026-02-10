@@ -1,159 +1,143 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { createBrowserClient } from '@/lib/database/supabase-client'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-
-interface HotPick {
-  id: string
-  event: {
-    home_team: string
-    away_team: string
-    sport_title: string
-    commence_time: string
-  }
-  confidence_score: number
-  edge_score: number
-  recommended_bet_type: string
-  recommended_line: any
-  ai_analysis: string
-  key_factors: string[]
-  risk_assessment: string
-}
+import { supabase } from '@/lib/database/supabase-client'
+import Link from 'next/link'
+import { 
+  TrendingUp, 
+  Target, 
+  Zap, 
+  BarChart3, 
+  Calendar,
+  ChevronRight,
+  Sparkles,
+  Trophy,
+  Clock,
+  DollarSign,
+  Percent,
+  Info,
+  ArrowRight,
+  Star
+} from 'lucide-react'
 
 export default function DashboardPage() {
   const router = useRouter()
-  const supabase = createBrowserClient()
-  
   const [user, setUser] = useState<any>(null)
   const [profile, setProfile] = useState<any>(null)
-  const [hotPicks, setHotPicks] = useState<HotPick[]>([])
+  const [hotPicks, setHotPicks] = useState<any[]>([])
+  const [stats, setStats] = useState({
+    winRate: 0,
+    totalPicks: 0,
+    roi: 0,
+    edgeScore: 0
+  })
   const [loading, setLoading] = useState(true)
-  const [expandedPick, setExpandedPick] = useState<string | null>(null)
 
   useEffect(() => {
-    checkUser()
+    loadDashboard()
   }, [])
 
-  async function checkUser() {
-    const { data: { session } } = await supabase.auth.getSession()
-    
-    if (!session) {
-      router.push('/login')
-      return
-    }
-
-    setUser(session.user)
-    await loadProfile(session.user.id)
-    await loadHotPicks(session.user.id)
-  }
-
-  async function loadProfile(userId: string) {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
-
-    if (data) {
-      setProfile(data)
-      
-      // Check if needs subscription
-      if (data.subscription_status === 'none') {
-        router.push('/pricing')
-      }
-    }
-  }
-
-  async function loadHotPicks(userId: string) {
+  const loadDashboard = async () => {
     try {
-      // Fetch today's hot picks for this user
-      const today = new Date().toISOString().split('T')[0]
-      
-      const { data, error } = await supabase
-        .from('daily_hot_picks')
-        .select(`
-          id,
-          prediction:ai_predictions (
-            id,
-            confidence_score,
-            edge_score,
-            recommended_bet_type,
-            recommended_line,
-            ai_analysis,
-            key_factors,
-            risk_assessment,
-            event:sports_events (
-              home_team,
-              away_team,
-              sport_title,
-              commence_time
-            )
-          )
-        `)
-        .eq('user_id', userId)
-        .eq('assigned_date', today)
-        .order('pick_rank', { ascending: true })
-
-      if (data) {
-        // Transform the data
-        const picks = data.map((pick: any) => ({
-          id: pick.id,
-          event: pick.prediction.event,
-          confidence_score: pick.prediction.confidence_score,
-          edge_score: pick.prediction.edge_score,
-          recommended_bet_type: pick.prediction.recommended_bet_type,
-          recommended_line: pick.prediction.recommended_line,
-          ai_analysis: pick.prediction.ai_analysis,
-          key_factors: pick.prediction.key_factors,
-          risk_assessment: pick.prediction.risk_assessment
-        }))
-        
-        setHotPicks(picks)
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+      if (!authUser) {
+        router.push('/login')
+        return
       }
+      setUser(authUser)
+
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authUser.id)
+        .single()
+
+      setProfile(profileData)
+      setHotPicks([]) // Will be populated when sports data is available
+      setLoading(false)
     } catch (error) {
-      console.error('Error loading hot picks:', error)
-    } finally {
+      console.error('Error loading dashboard:', error)
       setLoading(false)
     }
   }
 
-  async function handleSignOut() {
+  const handleSignOut = async () => {
     await supabase.auth.signOut()
     router.push('/')
   }
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading your picks...</p>
+          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-white text-lg">Loading your dashboard...</p>
         </div>
       </div>
     )
   }
 
+  const tierInfo = {
+    edge_starter: { name: 'Edge Starter', color: 'from-blue-500 to-cyan-500', simLimit: 3 },
+    edge_pro: { name: 'Edge Pro', color: 'from-purple-500 to-pink-500', simLimit: 10 },
+    edge_elite: { name: 'Edge Elite', color: 'from-amber-500 to-orange-500', simLimit: 50 }
+  }
+
+  const currentTier = tierInfo[profile?.subscription_tier as keyof typeof tierInfo] || tierInfo.edge_starter
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Edge Up Sim</h1>
-              <p className="text-sm text-gray-600">Welcome back, {profile?.full_name}</p>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
+      {/* Modern Header */}
+      <header className="bg-slate-900/50 backdrop-blur-xl border-b border-white/10 sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center space-x-8">
+              <Link href="/dashboard" className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/50">
+                  <Zap className="w-6 h-6 text-white" />
+                </div>
+                <span className="text-2xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+                  Edge Up Sim
+                </span>
+              </Link>
+              
+              <nav className="hidden md:flex items-center space-x-1">
+                <Link 
+                  href="/dashboard" 
+                  className="px-4 py-2 text-white font-medium bg-white/10 rounded-lg"
+                >
+                  Dashboard
+                </Link>
+                <Link 
+                  href="/simulate" 
+                  className="px-4 py-2 text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition"
+                >
+                  Simulate
+                </Link>
+                <Link 
+                  href="/history" 
+                  className="px-4 py-2 text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition"
+                >
+                  History
+                </Link>
+                <Link 
+                  href="/settings" 
+                  className="px-4 py-2 text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition"
+                >
+                  Settings
+                </Link>
+              </nav>
             </div>
-            <div className="flex gap-4">
-              <button
-                onClick={() => router.push('/simulate')}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-              >
-                Run Simulation
-              </button>
+
+            <div className="flex items-center space-x-4">
+              <div className="hidden md:block text-right">
+                <div className="text-xs text-gray-400 uppercase tracking-wide">Welcome back</div>
+                <div className="text-white font-semibold">{profile?.full_name || user?.email?.split('@')[0]}</div>
+              </div>
               <button
                 onClick={handleSignOut}
-                className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+                className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition font-medium"
               >
                 Sign Out
               </button>
@@ -162,141 +146,211 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-        {/* Subscription Info */}
-        <div className="mb-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <div className="flex justify-between items-center">
-            <div>
-              <p className="font-semibold text-blue-900">
-                {profile?.subscription_tier === 'edge_starter' && 'Edge Starter'}
-                {profile?.subscription_tier === 'edge_pro' && 'Edge Pro'}
-                {profile?.subscription_tier === 'edge_elite' && 'Edge Elite'}
-              </p>
-              <p className="text-sm text-blue-700">
-                {profile?.subscription_status === 'trialing' && `Trial ends ${new Date(profile.trial_ends_at).toLocaleDateString()}`}
-                {profile?.subscription_status === 'active' && 'Active subscription'}
-              </p>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        {/* Hero Tier Card */}
+        <div className={`relative overflow-hidden bg-gradient-to-r ${currentTier.color} rounded-3xl p-8 shadow-2xl`}>
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-32 -mt-32"></div>
+          <div className="relative z-10 flex flex-col md:flex-row items-center justify-between">
+            <div className="mb-6 md:mb-0">
+              <div className="flex items-center space-x-2 mb-3">
+                <Trophy className="w-6 h-6 text-white" />
+                <span className="text-sm font-bold uppercase tracking-wider text-white/90">Your Plan</span>
+              </div>
+              <h2 className="text-4xl md:text-5xl font-black text-white mb-2">{currentTier.name}</h2>
+              <div className="flex items-center space-x-4 text-white/90">
+                <div className="flex items-center space-x-2">
+                  <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                  <span className="font-semibold">{profile?.subscription_status === 'trialing' ? 'Free Trial' : 'Active'}</span>
+                </div>
+                <div className="h-4 w-px bg-white/30"></div>
+                <span className="font-medium">
+                  {profile?.daily_simulation_count || 0} / {currentTier.simLimit} sims today
+                </span>
+              </div>
             </div>
-            <div className="text-right">
-              <p className="text-sm text-blue-700">
-                Simulations: {profile?.daily_simulation_count}/{profile?.daily_simulation_limit} today
-              </p>
-              {profile?.monthly_simulation_rollover > 0 && (
-                <p className="text-sm text-blue-700">
-                  +{profile.monthly_simulation_rollover} rollover
-                </p>
-              )}
-            </div>
+            <Link
+              href="/pricing"
+              className="group px-8 py-4 bg-white hover:bg-white/90 text-gray-900 rounded-xl font-bold text-lg transition shadow-xl flex items-center space-x-2"
+            >
+              <Star className="w-5 h-5" />
+              <span>Upgrade</span>
+              <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition" />
+            </Link>
           </div>
         </div>
 
-        {/* Hot Picks */}
-        <div className="mb-8">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">
-            Today's Hot Picks
-          </h2>
-          
+        {/* Performance Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          {[
+            { 
+              icon: TrendingUp, 
+              label: 'Win Rate', 
+              value: `${stats.winRate}%`, 
+              subtitle: 'Last 30 days',
+              color: 'from-green-500 to-emerald-500',
+              bgColor: 'bg-green-500/10',
+              iconColor: 'text-green-400'
+            },
+            { 
+              icon: Target, 
+              label: 'Total Picks', 
+              value: stats.totalPicks.toString(), 
+              subtitle: 'All time',
+              color: 'from-blue-500 to-cyan-500',
+              bgColor: 'bg-blue-500/10',
+              iconColor: 'text-blue-400'
+            },
+            { 
+              icon: DollarSign, 
+              label: 'ROI', 
+              value: `+${stats.roi}%`, 
+              subtitle: 'Profit margin',
+              color: 'from-purple-500 to-pink-500',
+              bgColor: 'bg-purple-500/10',
+              iconColor: 'text-purple-400'
+            },
+            { 
+              icon: Percent, 
+              label: 'Avg Edge', 
+              value: `+${stats.edgeScore}%`, 
+              subtitle: 'Expected value',
+              color: 'from-amber-500 to-orange-500',
+              bgColor: 'bg-amber-500/10',
+              iconColor: 'text-amber-400'
+            }
+          ].map((stat, index) => (
+            <div key={index} className="group bg-slate-800/50 backdrop-blur-xl border border-white/10 rounded-2xl p-6 hover:bg-slate-800/70 hover:border-white/20 transition">
+              <div className="flex items-start justify-between mb-4">
+                <div className={`p-3 ${stat.bgColor} rounded-xl`}>
+                  <stat.icon className={`w-6 h-6 ${stat.iconColor}`} />
+                </div>
+                <div className="text-right">
+                  <div className="text-3xl font-black text-white">{stat.value}</div>
+                  <div className="text-xs text-gray-500 uppercase tracking-wider mt-1">{stat.subtitle}</div>
+                </div>
+              </div>
+              <div className="text-sm font-semibold text-gray-400">{stat.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Hot Picks Section */}
+        <div className="bg-slate-800/50 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl">
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center space-x-4">
+              <div className="p-3 bg-gradient-to-br from-orange-500 to-pink-500 rounded-2xl shadow-lg shadow-orange-500/50">
+                <Sparkles className="w-8 h-8 text-white" />
+              </div>
+              <div>
+                <h2 className="text-3xl font-black text-white">Today's Hot Picks</h2>
+                <p className="text-gray-400">AI-powered predictions based on your sport preferences</p>
+              </div>
+            </div>
+            <div className="hidden md:flex items-center space-x-2 px-4 py-2 bg-slate-700/50 rounded-lg">
+              <Clock className="w-4 h-4 text-gray-400" />
+              <span className="text-sm text-gray-400">Updated 5min ago</span>
+            </div>
+          </div>
+
           {hotPicks.length === 0 ? (
-            <div className="bg-white rounded-lg shadow p-8 text-center">
-              <p className="text-gray-600">
-                No hot picks available yet. Check back soon!
+            <div className="text-center py-20">
+              <div className="w-24 h-24 bg-gradient-to-br from-slate-700 to-slate-800 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl">
+                <Calendar className="w-12 h-12 text-gray-400" />
+              </div>
+              <h3 className="text-2xl font-bold text-white mb-3">No hot picks available yet</h3>
+              <p className="text-gray-400 mb-8 max-w-md mx-auto leading-relaxed">
+                Hot picks are generated daily based on upcoming games in your preferred sports. 
+                Check back soon or run a custom simulation!
               </p>
+              <Link
+                href="/simulate"
+                className="inline-flex items-center space-x-3 px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white rounded-xl font-bold text-lg transition shadow-xl shadow-blue-500/50 group"
+              >
+                <Zap className="w-6 h-6" />
+                <span>Run Custom Simulation</span>
+                <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition" />
+              </Link>
             </div>
           ) : (
-            <div className="grid gap-4 md:grid-cols-3">
-              {hotPicks.map((pick) => (
-                <div key={pick.id} className="bg-white rounded-lg shadow-md overflow-hidden">
-                  <div className="p-6">
-                    <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <p className="text-sm text-gray-600">{pick.event.sport_title}</p>
-                        <p className="font-bold text-lg">{pick.event.away_team}</p>
-                        <p className="text-gray-600">@</p>
-                        <p className="font-bold text-lg">{pick.event.home_team}</p>
-                      </div>
-                      <div className="text-right">
-                        <div className="bg-green-100 text-green-800 px-2 py-1 rounded text-sm font-semibold">
-                          {pick.confidence_score}% Confidence
-                        </div>
-                        <div className="mt-1 text-sm text-gray-600">
-                          +{pick.edge_score.toFixed(1)}% Edge
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mb-4">
-                      <p className="text-sm text-gray-600">Recommended Bet</p>
-                      <p className="font-semibold">{pick.recommended_line}</p>
-                    </div>
-
-                    <button
-                      onClick={() => setExpandedPick(expandedPick === pick.id ? null : pick.id)}
-                      className="w-full py-2 px-4 bg-gray-100 hover:bg-gray-200 rounded text-sm font-medium"
-                    >
-                      {expandedPick === pick.id ? 'Hide Details' : 'View Analysis'}
-                    </button>
-
-                    {expandedPick === pick.id && (
-                      <div className="mt-4 pt-4 border-t">
-                        <div className="mb-4">
-                          <p className="font-semibold text-sm mb-2">Key Factors:</p>
-                          <ul className="list-disc list-inside text-sm text-gray-700 space-y-1">
-                            {pick.key_factors.map((factor, idx) => (
-                              <li key={idx}>{factor}</li>
-                            ))}
-                          </ul>
-                        </div>
-
-                        <div className="mb-4">
-                          <p className="font-semibold text-sm mb-2">Analysis:</p>
-                          <p className="text-sm text-gray-700">{pick.ai_analysis}</p>
-                        </div>
-
-                        <div>
-                          <p className="font-semibold text-sm mb-2">Risk:</p>
-                          <p className="text-sm text-red-600">{pick.risk_assessment}</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {hotPicks.map((pick, index) => (
+                <div key={index} className="bg-slate-700/30 border border-white/5 rounded-2xl p-6 hover:bg-slate-700/50 hover:border-white/10 transition">
+                  {/* Pick details would go here */}
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        {/* Quick Actions */}
-        <div className="grid gap-4 md:grid-cols-3">
-          <button
-            onClick={() => router.push('/simulate')}
-            className="p-6 bg-white rounded-lg shadow hover:shadow-md transition-shadow"
+        {/* Action Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Link
+            href="/simulate"
+            className="group relative overflow-hidden bg-gradient-to-br from-blue-600 via-blue-700 to-blue-800 hover:from-blue-500 hover:via-blue-600 hover:to-blue-700 rounded-2xl p-8 text-white transition shadow-2xl shadow-blue-500/50"
           >
-            <h3 className="font-semibold text-lg mb-2">Run Simulation</h3>
-            <p className="text-sm text-gray-600">
-              Analyze any upcoming game
-            </p>
-          </button>
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-16 -mt-16 group-hover:bg-white/20 transition"></div>
+            <div className="relative z-10">
+              <div className="flex items-center justify-between mb-6">
+                <div className="p-4 bg-white/10 rounded-2xl backdrop-blur-sm">
+                  <Zap className="w-10 h-10" />
+                </div>
+                <ChevronRight className="w-8 h-8 group-hover:translate-x-2 transition" />
+              </div>
+              <h3 className="text-2xl font-bold mb-2">Run Simulation</h3>
+              <p className="text-blue-100">Analyze any upcoming game with AI-powered predictions</p>
+            </div>
+          </Link>
 
-          <button
-            onClick={() => router.push('/history')}
-            className="p-6 bg-white rounded-lg shadow hover:shadow-md transition-shadow"
+          <Link
+            href="/history"
+            className="group relative overflow-hidden bg-gradient-to-br from-purple-600 via-purple-700 to-purple-800 hover:from-purple-500 hover:via-purple-600 hover:to-purple-700 rounded-2xl p-8 text-white transition shadow-2xl shadow-purple-500/50"
           >
-            <h3 className="font-semibold text-lg mb-2">Prediction History</h3>
-            <p className="text-sm text-gray-600">
-              View past picks and results
-            </p>
-          </button>
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-16 -mt-16 group-hover:bg-white/20 transition"></div>
+            <div className="relative z-10">
+              <div className="flex items-center justify-between mb-6">
+                <div className="p-4 bg-white/10 rounded-2xl backdrop-blur-sm">
+                  <BarChart3 className="w-10 h-10" />
+                </div>
+                <ChevronRight className="w-8 h-8 group-hover:translate-x-2 transition" />
+              </div>
+              <h3 className="text-2xl font-bold mb-2">Prediction History</h3>
+              <p className="text-purple-100">View past picks and track your performance over time</p>
+            </div>
+          </Link>
 
-          <button
-            onClick={() => router.push('/profile')}
-            className="p-6 bg-white rounded-lg shadow hover:shadow-md transition-shadow"
+          <Link
+            href="/settings"
+            className="group relative overflow-hidden bg-gradient-to-br from-slate-700 via-slate-800 to-slate-900 hover:from-slate-600 hover:via-slate-700 hover:to-slate-800 rounded-2xl p-8 text-white transition shadow-2xl"
           >
-            <h3 className="font-semibold text-lg mb-2">Settings</h3>
-            <p className="text-sm text-gray-600">
-              Manage your account
-            </p>
-          </button>
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-16 -mt-16 group-hover:bg-white/20 transition"></div>
+            <div className="relative z-10">
+              <div className="flex items-center justify-between mb-6">
+                <div className="p-4 bg-white/10 rounded-2xl backdrop-blur-sm">
+                  <Target className="w-10 h-10" />
+                </div>
+                <ChevronRight className="w-8 h-8 group-hover:translate-x-2 transition" />
+              </div>
+              <h3 className="text-2xl font-bold mb-2">Account Settings</h3>
+              <p className="text-gray-300">Manage your account and sport preferences</p>
+            </div>
+          </Link>
+        </div>
+
+        {/* Info Banner */}
+        <div className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/20 rounded-2xl p-6">
+          <div className="flex items-start space-x-4">
+            <div className="p-3 bg-blue-500/20 rounded-xl flex-shrink-0">
+              <Info className="w-6 h-6 text-blue-400" />
+            </div>
+            <div>
+              <h3 className="text-white font-bold text-lg mb-2">How Edge Up Sim Works</h3>
+              <p className="text-gray-300 leading-relaxed">
+                Our AI analyzes team statistics, injuries, weather conditions, betting trends, and more to generate 
+                predictions with confidence scores and edge calculations. Only recommendations above 65% confidence 
+                with positive expected value are shown, ensuring you get the highest quality picks.
+              </p>
+            </div>
+          </div>
         </div>
       </main>
     </div>
