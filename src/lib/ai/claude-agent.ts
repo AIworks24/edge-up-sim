@@ -207,14 +207,14 @@ Sport: ${sport}
   }
 
   private parseAIResponse(response: string, betType: string): any {
-    // Extract sections using regex
-    const predictionMatch = response.match(/### PREDICTION\s*(.*?)(?=###|$)/s)
-    const confidenceMatch = response.match(/### CONFIDENCE LEVEL\s*(.*?)(?=###|$)/s)
-    const probabilityMatch = response.match(/### TRUE PROBABILITY ESTIMATE\s*(.*?)(?=###|$)/s)
-    const betMatch = response.match(/### RECOMMENDED BET\s*(.*?)(?=###|$)/s)
-    const factorsMatch = response.match(/### KEY FACTORS\s*(.*?)(?=###|$)/s)
-    const analysisMatch = response.match(/### DETAILED ANALYSIS\s*(.*?)(?=###|$)/s)
-    const riskMatch = response.match(/### RISK ASSESSMENT\s*(.*?)(?=###|$)/s)
+    // Extract sections using regex (using [\s\S] instead of /s flag for ES2015+ compatibility)
+    const predictionMatch = response.match(/### PREDICTION\s*([\s\S]*?)(?=###|$)/)
+    const confidenceMatch = response.match(/### CONFIDENCE LEVEL\s*([\s\S]*?)(?=###|$)/)
+    const probabilityMatch = response.match(/### TRUE PROBABILITY ESTIMATE\s*([\s\S]*?)(?=###|$)/)
+    const betMatch = response.match(/### RECOMMENDED BET\s*([\s\S]*?)(?=###|$)/)
+    const factorsMatch = response.match(/### KEY FACTORS\s*([\s\S]*?)(?=###|$)/)
+    const analysisMatch = response.match(/### DETAILED ANALYSIS\s*([\s\S]*?)(?=###|$)/)
+    const riskMatch = response.match(/### RISK ASSESSMENT\s*([\s\S]*?)(?=###|$)/)
 
     const prediction = predictionMatch ? predictionMatch[1].trim() : ''
     const confidenceText = confidenceMatch ? confidenceMatch[1].trim() : '0'
