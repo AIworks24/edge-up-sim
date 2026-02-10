@@ -145,7 +145,7 @@ export default function RegisterPage() {
                 value={formData.fullName}
                 onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
                 className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition text-gray-900 bg-white placeholder-gray-400"
-                placeholder="Matt"
+                placeholder="Full Name"
               />
             </div>
 
