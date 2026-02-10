@@ -1,4 +1,4 @@
-import { supabaseAdmin } from '@/lib/database/supabase-client'
+import { supabaseAdmin } from '@/lib/database/supabase-admin'
 
 interface LearningData {
   predictionId: string
