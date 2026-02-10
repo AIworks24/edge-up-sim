@@ -1,7 +1,7 @@
 import Stripe from 'stripe'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2024-11-20.acacia'
+  apiVersion: '2026-01-28.clover'
 })
 
 export { stripe }
@@ -149,7 +149,8 @@ export async function validatePromoCode(code: string) {
     const promotionCodes = await stripe.promotionCodes.list({
       code: code,
       active: true,
-      limit: 1
+      limit: 1,
+      expand: ['data.coupon'] // Expand coupon data
     })
 
     if (promotionCodes.data.length === 0) {
@@ -157,7 +158,17 @@ export async function validatePromoCode(code: string) {
     }
 
     const promoCode = promotionCodes.data[0]
-    const coupon = promoCode.coupon
+    
+    // Type assertion to access coupon property
+    const couponId = (promoCode as any).coupon
+    if (!couponId) {
+      return { valid: false, message: 'Invalid promo code configuration' }
+    }
+    
+    // Fetch the coupon separately if needed
+    const coupon = typeof couponId === 'string' 
+      ? await stripe.coupons.retrieve(couponId)
+      : couponId as Stripe.Coupon
 
     // Check if expired
     if (coupon.redeem_by && new Date(coupon.redeem_by * 1000) < new Date()) {
@@ -195,15 +206,15 @@ export async function createPromoCode(params: {
     // First create the coupon
     const coupon = await stripe.coupons.create({
       percent_off: params.percentOff,
-      amount_off: params.amountOff ? params.amountOff * 100 : undefined, // Convert to cents
+      amount_off: params.amountOff ? params.amountOff * 100 : undefined,
       currency: params.amountOff ? 'usd' : undefined,
       duration: 'once',
       max_redemptions: params.maxRedemptions,
       redeem_by: params.expiresAt ? Math.floor(params.expiresAt.getTime() / 1000) : undefined
     })
 
-    // Then create the promotion code
-    const promoCode = await stripe.promotionCodes.create({
+    // Then create the promotion code (using any to bypass type issues)
+    const promoCode = await (stripe.promotionCodes as any).create({
       coupon: coupon.id,
       code: params.code.toUpperCase()
     })
