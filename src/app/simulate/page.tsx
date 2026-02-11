@@ -13,7 +13,8 @@ import {
   Calendar,
   AlertCircle,
   Loader2,
-  CheckCircle2
+  CheckCircle2,
+  DollarSign
 } from 'lucide-react'
 
 interface Game {
@@ -23,7 +24,7 @@ interface Game {
   sport_title: string
   sport_key: string
   commence_time: string
-  odds_data: any
+  odds_data: any[]
 }
 
 // Map UI sport keys to database sport keys
@@ -34,6 +35,16 @@ const SPORT_KEY_MAP: Record<string, string> = {
   'ncaab': 'basketball_ncaab',
   'mlb': 'baseball_mlb',
   'nhl': 'icehockey_nhl'
+}
+
+// Reverse map for API calls
+const DB_TO_UI_SPORT_MAP: Record<string, string> = {
+  'americanfootball_nfl': 'nfl',
+  'basketball_nba': 'nba',
+  'americanfootball_ncaa': 'ncaaf',
+  'basketball_ncaab': 'ncaab',
+  'baseball_mlb': 'mlb',
+  'icehockey_nhl': 'nhl'
 }
 
 export default function SimulatePage() {
@@ -154,6 +165,36 @@ export default function SimulatePage() {
     }
   }
 
+  // Extract betting odds from odds_data
+  const getGameOdds = (game: Game) => {
+    if (!game.odds_data || game.odds_data.length === 0) {
+      return { moneyline: null, spread: null, total: null }
+    }
+
+    const firstBookmaker = game.odds_data[0]
+    const result: any = { moneyline: null, spread: null, total: null }
+
+    if (firstBookmaker && firstBookmaker.markets) {
+      firstBookmaker.markets.forEach((market: any) => {
+        if (market.key === 'h2h') {
+          result.moneyline = market.outcomes
+        } else if (market.key === 'spreads') {
+          result.spread = market.outcomes
+        } else if (market.key === 'totals') {
+          result.total = market.outcomes
+        }
+      })
+    }
+
+    return result
+  }
+
+  // Format American odds
+  const formatOdds = (odds: number) => {
+    if (odds > 0) return `+${odds}`
+    return odds.toString()
+  }
+
   const runSimulation = async () => {
     if (!selectedGame || !selectedBetType) return
 
@@ -172,6 +213,16 @@ export default function SimulatePage() {
     setPrediction(null)
 
     try {
+      // Get the UI sport key from the database sport key
+      const uiSportKey = DB_TO_UI_SPORT_MAP[selectedGame.sport_key]
+      
+      console.log('Generating prediction with:', {
+        eventId: selectedGame.id,
+        sport: uiSportKey,
+        betType: selectedBetType,
+        userId: user.id
+      })
+
       // Call API to generate prediction
       const response = await fetch('/api/predictions/generate', {
         method: 'POST',
@@ -181,6 +232,7 @@ export default function SimulatePage() {
         },
         body: JSON.stringify({
           eventId: selectedGame.id,
+          sport: uiSportKey, // CRITICAL: Include the sport parameter
           betType: selectedBetType,
           userId: user.id
         })
@@ -192,7 +244,7 @@ export default function SimulatePage() {
         throw new Error(result.error || 'Failed to generate prediction')
       }
 
-      setPrediction(result.prediction)
+      setPrediction(result.prediction || result)
 
       // Refresh profile to update simulation count
       const { data: updatedProfile } = await supabase
@@ -285,29 +337,29 @@ export default function SimulatePage() {
             <div className="space-y-6">
               <div>
                 <div className="text-sm font-semibold text-gray-400 mb-2">Recommended Bet</div>
-                <div className="text-2xl font-bold text-white">{prediction.predicted_winner}</div>
+                <div className="text-2xl font-bold text-white">{prediction.predicted_winner || prediction.predictedWinner}</div>
               </div>
 
               <div className="grid grid-cols-2 gap-6">
                 <div>
                   <div className="text-sm font-semibold text-gray-400 mb-2">Confidence</div>
-                  <div className="text-3xl font-bold text-blue-400">{prediction.confidence_score}%</div>
+                  <div className="text-3xl font-bold text-blue-400">{prediction.confidence_score || prediction.confidenceScore}%</div>
                 </div>
                 <div>
                   <div className="text-sm font-semibold text-gray-400 mb-2">Edge Score</div>
-                  <div className="text-3xl font-bold text-green-400">{prediction.edge_score}%</div>
+                  <div className="text-3xl font-bold text-green-400">{prediction.edge_score || prediction.edgeScore}%</div>
                 </div>
               </div>
 
               <div>
                 <div className="text-sm font-semibold text-gray-400 mb-2">AI Analysis</div>
-                <div className="text-gray-200 leading-relaxed">{prediction.ai_analysis}</div>
+                <div className="text-gray-200 leading-relaxed">{prediction.ai_analysis || prediction.aiAnalysis}</div>
               </div>
 
               <div>
                 <div className="text-sm font-semibold text-gray-400 mb-2">Key Factors</div>
                 <ul className="space-y-2">
-                  {prediction.key_factors?.map((factor: string, index: number) => (
+                  {(prediction.key_factors || prediction.keyFactors || []).map((factor: string, index: number) => (
                     <li key={index} className="flex items-start space-x-2">
                       <Target className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
                       <span className="text-gray-300">{factor}</span>
@@ -318,7 +370,7 @@ export default function SimulatePage() {
 
               <div>
                 <div className="text-sm font-semibold text-gray-400 mb-2">Risk Assessment</div>
-                <div className="text-orange-300">{prediction.risk_assessment}</div>
+                <div className="text-orange-300">{prediction.risk_assessment || prediction.riskAssessment}</div>
               </div>
             </div>
 
@@ -386,31 +438,86 @@ export default function SimulatePage() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {availableGames.map((game) => (
-                      <button
-                        key={game.id}
-                        onClick={() => {
-                          setSelectedGame(game)
-                          setSelectedBetType('')
-                        }}
-                        className={`w-full p-6 rounded-xl border-2 transition text-left ${
-                          selectedGame?.id === game.id
-                            ? 'border-blue-500 bg-blue-500/10'
-                            : 'border-white/10 bg-white/5 hover:border-white/20'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="text-sm text-gray-400 mb-1">{game.sport_title}</div>
-                            <div className="text-white font-bold text-lg">{game.away_team} @ {game.home_team}</div>
-                            <div className="text-gray-400 text-sm mt-1">
-                              {new Date(game.commence_time).toLocaleString()}
+                    {availableGames.map((game) => {
+                      const odds = getGameOdds(game)
+                      return (
+                        <button
+                          key={game.id}
+                          onClick={() => {
+                            setSelectedGame(game)
+                            setSelectedBetType('')
+                          }}
+                          className={`w-full p-6 rounded-xl border-2 transition text-left ${
+                            selectedGame?.id === game.id
+                              ? 'border-blue-500 bg-blue-500/10'
+                              : 'border-white/10 bg-white/5 hover:border-white/20'
+                          }`}
+                        >
+                          <div className="space-y-4">
+                            {/* Game Header */}
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <div className="text-sm text-gray-400 mb-1">{game.sport_title}</div>
+                                <div className="text-white font-bold text-lg">{game.away_team} @ {game.home_team}</div>
+                                <div className="text-gray-400 text-sm mt-1">
+                                  {new Date(game.commence_time).toLocaleString()}
+                                </div>
+                              </div>
+                              <ChevronDown className={`w-5 h-5 text-gray-400 transition flex-shrink-0 ml-4 ${selectedGame?.id === game.id ? 'rotate-180' : ''}`} />
                             </div>
+
+                            {/* Betting Odds */}
+                            {odds.moneyline && (
+                              <div className="grid grid-cols-3 gap-4 pt-4 border-t border-white/10">
+                                {/* Moneyline */}
+                                <div>
+                                  <div className="text-xs text-gray-500 mb-2 flex items-center">
+                                    <DollarSign className="w-3 h-3 mr-1" />
+                                    Moneyline
+                                  </div>
+                                  {odds.moneyline.map((outcome: any, idx: number) => (
+                                    <div key={idx} className="text-sm">
+                                      <span className="text-gray-400">{outcome.name}: </span>
+                                      <span className="text-white font-semibold">{formatOdds(outcome.price)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+
+                                {/* Spread */}
+                                {odds.spread && (
+                                  <div>
+                                    <div className="text-xs text-gray-500 mb-2">Spread</div>
+                                    {odds.spread.map((outcome: any, idx: number) => (
+                                      <div key={idx} className="text-sm">
+                                        <span className="text-gray-400">{outcome.name}: </span>
+                                        <span className="text-white font-semibold">
+                                          {outcome.point > 0 ? '+' : ''}{outcome.point} ({formatOdds(outcome.price)})
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+
+                                {/* Total */}
+                                {odds.total && (
+                                  <div>
+                                    <div className="text-xs text-gray-500 mb-2">Total</div>
+                                    {odds.total.map((outcome: any, idx: number) => (
+                                      <div key={idx} className="text-sm">
+                                        <span className="text-gray-400">{outcome.name}: </span>
+                                        <span className="text-white font-semibold">
+                                          {outcome.point} ({formatOdds(outcome.price)})
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
-                          <ChevronDown className={`w-5 h-5 text-gray-400 transition ${selectedGame?.id === game.id ? 'rotate-180' : ''}`} />
-                        </div>
-                      </button>
-                    ))}
+                        </button>
+                      )
+                    })}
                   </div>
                 )}
               </div>
