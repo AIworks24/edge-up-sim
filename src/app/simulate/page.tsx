@@ -21,8 +21,19 @@ interface Game {
   home_team: string
   away_team: string
   sport_title: string
+  sport_key: string
   commence_time: string
   odds_data: any
+}
+
+// Map UI sport keys to database sport keys
+const SPORT_KEY_MAP: Record<string, string> = {
+  'nfl': 'americanfootball_nfl',
+  'nba': 'basketball_nba',
+  'ncaaf': 'americanfootball_ncaa',
+  'ncaab': 'basketball_ncaab',
+  'mlb': 'baseball_mlb',
+  'nhl': 'icehockey_nhl'
 }
 
 export default function SimulatePage() {
@@ -98,29 +109,46 @@ export default function SimulatePage() {
   const loadGames = async () => {
     setLoadingGames(true)
     setError('')
+    setAvailableGames([])
     
     try {
-      // Fetch upcoming games for selected sport
+      // Convert UI sport key to database sport key
+      const dbSportKey = SPORT_KEY_MAP[selectedSport]
+      
+      if (!dbSportKey) {
+        throw new Error(`Invalid sport key: ${selectedSport}`)
+      }
+
+      console.log(`Loading games for ${selectedSport} (database key: ${dbSportKey})`)
+      
+      // Fetch upcoming games for selected sport using the correct database key
       const { data: games, error: gamesError } = await supabase
         .from('sports_events')
         .select('*')
-        .eq('sport_key', selectedSport)
+        .eq('sport_key', dbSportKey)
         .eq('event_status', 'upcoming')
         .gte('commence_time', new Date().toISOString())
         .order('commence_time', { ascending: true })
         .limit(20)
 
-      if (gamesError) throw gamesError
+      if (gamesError) {
+        console.error('Database error:', gamesError)
+        throw gamesError
+      }
+
+      console.log(`Found ${games?.length || 0} games for ${selectedSport}`)
 
       if (!games || games.length === 0) {
-        setError(`No upcoming ${selectedSport.toUpperCase()} games found. This could mean the sports data hasn't been loaded yet. Please try another sport or check back later.`)
+        setError(`No upcoming ${selectedSport.toUpperCase()} games found. This could mean:\n• The sport is currently out of season\n• Games haven't been loaded yet\n\nTry another sport or check back later.`)
         setAvailableGames([])
       } else {
         setAvailableGames(games)
+        setError('') // Clear any previous errors
       }
     } catch (error: any) {
       console.error('Error loading games:', error)
-      setError('Failed to load games. Please try again.')
+      setError(`Failed to load games: ${error.message}`)
+      setAvailableGames([])
     } finally {
       setLoadingGames(false)
     }
@@ -147,7 +175,10 @@ export default function SimulatePage() {
       // Call API to generate prediction
       const response = await fetch('/api/predictions/generate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
+        },
         body: JSON.stringify({
           eventId: selectedGame.id,
           betType: selectedBetType,
@@ -222,63 +253,64 @@ export default function SimulatePage() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Title */}
-        <div className="text-center mb-12">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl mb-4 shadow-lg shadow-blue-500/50">
-            <Zap className="w-8 h-8 text-white" />
-          </div>
-          <h1 className="text-4xl font-black text-white mb-2">Run Custom Simulation</h1>
-          <p className="text-gray-400 text-lg">Select a game and bet type to get AI-powered predictions</p>
+      {/* Main Content */}
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="mb-12 text-center">
+          <h1 className="text-5xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent mb-4">
+            Custom Simulation
+          </h1>
+          <p className="text-xl text-gray-300">
+            AI-powered betting analysis for any game
+          </p>
         </div>
 
         {/* Error Message */}
         {error && (
-          <div className="mb-8 bg-red-500/10 border border-red-500/20 rounded-xl p-4 flex items-start space-x-3">
-            <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-            <div>
-              <div className="text-red-400 font-semibold">Error</div>
-              <div className="text-red-300 text-sm">{error}</div>
+          <div className="mb-8 p-6 bg-red-500/10 border border-red-500/50 rounded-xl">
+            <div className="flex items-start space-x-3">
+              <AlertCircle className="w-6 h-6 text-red-400 flex-shrink-0 mt-0.5" />
+              <div className="text-red-200 whitespace-pre-line">{error}</div>
             </div>
           </div>
         )}
 
         {/* Prediction Result */}
         {prediction && (
-          <div className="mb-8 bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/20 rounded-2xl p-8">
+          <div className="bg-gradient-to-br from-green-900/50 to-blue-900/50 backdrop-blur-xl border border-green-500/30 rounded-2xl p-8 mb-8">
             <div className="flex items-center space-x-3 mb-6">
               <CheckCircle2 className="w-8 h-8 text-green-400" />
-              <h2 className="text-2xl font-bold text-white">Prediction Generated</h2>
+              <h2 className="text-3xl font-bold text-white">Simulation Complete</h2>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-              <div className="bg-white/5 rounded-xl p-4">
-                <div className="text-sm text-gray-400 mb-1">Confidence</div>
-                <div className="text-3xl font-bold text-white">{prediction.confidence_score}%</div>
+            <div className="space-y-6">
+              <div>
+                <div className="text-sm font-semibold text-gray-400 mb-2">Recommended Bet</div>
+                <div className="text-2xl font-bold text-white">{prediction.predicted_winner}</div>
               </div>
-              <div className="bg-white/5 rounded-xl p-4">
-                <div className="text-sm text-gray-400 mb-1">Edge Score</div>
-                <div className="text-3xl font-bold text-green-400">+{prediction.edge_score.toFixed(1)}%</div>
-              </div>
-              <div className="bg-white/5 rounded-xl p-4">
-                <div className="text-sm text-gray-400 mb-1">Recommended</div>
-                <div className="text-lg font-bold text-white">{prediction.recommended_bet_type}</div>
-              </div>
-            </div>
 
-            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <div className="text-sm font-semibold text-gray-400 mb-2">Confidence</div>
+                  <div className="text-3xl font-bold text-blue-400">{prediction.confidence_score}%</div>
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-gray-400 mb-2">Edge Score</div>
+                  <div className="text-3xl font-bold text-green-400">{prediction.edge_score}%</div>
+                </div>
+              </div>
+
               <div>
                 <div className="text-sm font-semibold text-gray-400 mb-2">AI Analysis</div>
-                <div className="text-white leading-relaxed">{prediction.ai_analysis}</div>
+                <div className="text-gray-200 leading-relaxed">{prediction.ai_analysis}</div>
               </div>
 
               <div>
                 <div className="text-sm font-semibold text-gray-400 mb-2">Key Factors</div>
                 <ul className="space-y-2">
                   {prediction.key_factors?.map((factor: string, index: number) => (
-                    <li key={index} className="flex items-start space-x-2 text-white">
-                      <span className="text-blue-400 mt-1">•</span>
-                      <span>{factor}</span>
+                    <li key={index} className="flex items-start space-x-2">
+                      <Target className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
+                      <span className="text-gray-300">{factor}</span>
                     </li>
                   ))}
                 </ul>
@@ -317,6 +349,7 @@ export default function SimulatePage() {
                       setSelectedSport(sport.key)
                       setSelectedGame(null)
                       setSelectedBetType('')
+                      setError('') // Clear error when selecting new sport
                     }}
                     className={`p-6 rounded-xl border-2 transition ${
                       selectedSport === sport.key
@@ -348,7 +381,7 @@ export default function SimulatePage() {
                 ) : availableGames.length === 0 ? (
                   <div className="text-center py-12">
                     <Calendar className="w-16 h-16 text-gray-500 mx-auto mb-4" />
-                    <p className="text-gray-400">No upcoming games available</p>
+                    <p className="text-gray-400">No upcoming games available for {selectedSport.toUpperCase()}</p>
                     <p className="text-gray-500 text-sm mt-2">Try selecting a different sport</p>
                   </div>
                 ) : (
@@ -392,35 +425,35 @@ export default function SimulatePage() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {betTypes.map((bet) => (
+                  {betTypes.map((betType) => (
                     <button
-                      key={bet.key}
-                      onClick={() => setSelectedBetType(bet.key)}
-                      className={`p-6 rounded-xl border-2 transition ${
-                        selectedBetType === bet.key
+                      key={betType.key}
+                      onClick={() => setSelectedBetType(betType.key)}
+                      className={`p-6 rounded-xl border-2 transition text-left ${
+                        selectedBetType === betType.key
                           ? 'border-blue-500 bg-blue-500/10'
                           : 'border-white/10 bg-white/5 hover:border-white/20'
                       }`}
                     >
-                      <div className="text-white font-bold text-lg mb-1">{bet.name}</div>
-                      <div className="text-gray-400 text-sm">{bet.description}</div>
+                      <div className="text-white font-bold text-lg mb-1">{betType.name}</div>
+                      <div className="text-gray-400 text-sm">{betType.description}</div>
                     </button>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Run Simulation Button */}
-            {selectedGame && selectedBetType && (
+            {/* Step 4: Run Simulation */}
+            {selectedBetType && (
               <button
                 onClick={runSimulation}
                 disabled={simulating}
-                className="w-full py-6 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 disabled:from-gray-600 disabled:to-gray-700 text-white rounded-2xl font-bold text-xl transition shadow-2xl shadow-blue-500/50 flex items-center justify-center space-x-3"
+                className="w-full py-6 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white rounded-2xl font-bold text-xl transition shadow-2xl shadow-blue-500/50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-3"
               >
                 {simulating ? (
                   <>
                     <Loader2 className="w-6 h-6 animate-spin" />
-                    <span>Generating Prediction...</span>
+                    <span>Running Simulation...</span>
                   </>
                 ) : (
                   <>
