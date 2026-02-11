@@ -24,7 +24,7 @@ interface Game {
   sport_title: string
   sport_key: string
   commence_time: string
-  odds_data: any[]
+  odds_data: any
 }
 
 // Map UI sport keys to database sport keys
@@ -52,19 +52,11 @@ export default function SimulatePage() {
   const [user, setUser] = useState<any>(null)
   const [profile, setProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  
-  // Step 1: Sport Selection
   const [selectedSport, setSelectedSport] = useState<string>('')
-  
-  // Step 2: Game Selection
   const [availableGames, setAvailableGames] = useState<Game[]>([])
   const [selectedGame, setSelectedGame] = useState<Game | null>(null)
   const [loadingGames, setLoadingGames] = useState(false)
-  
-  // Step 3: Bet Type Selection
   const [selectedBetType, setSelectedBetType] = useState<string>('')
-  
-  // Step 4: Running Simulation
   const [simulating, setSimulating] = useState(false)
   const [prediction, setPrediction] = useState<any>(null)
   const [error, setError] = useState('')
@@ -123,7 +115,6 @@ export default function SimulatePage() {
     setAvailableGames([])
     
     try {
-      // Convert UI sport key to database sport key
       const dbSportKey = SPORT_KEY_MAP[selectedSport]
       
       if (!dbSportKey) {
@@ -132,7 +123,6 @@ export default function SimulatePage() {
 
       console.log(`Loading games for ${selectedSport} (database key: ${dbSportKey})`)
       
-      // Fetch upcoming games for selected sport using the correct database key
       const { data: games, error: gamesError } = await supabase
         .from('sports_events')
         .select('*')
@@ -147,14 +137,19 @@ export default function SimulatePage() {
         throw gamesError
       }
 
-      console.log(`Found ${games?.length || 0} games for ${selectedSport}`)
+      console.log(`Found ${games?.length || 0} games`)
+      
+      // DEBUG: Log first game's odds_data structure
+      if (games && games.length > 0) {
+        console.log('ODDS DATA STRUCTURE:', JSON.stringify(games[0].odds_data, null, 2))
+      }
 
       if (!games || games.length === 0) {
-        setError(`No upcoming ${selectedSport.toUpperCase()} games found. This could mean:\n• The sport is currently out of season\n• Games haven't been loaded yet\n\nTry another sport or check back later.`)
+        setError(`No upcoming ${selectedSport.toUpperCase()} games found.`)
         setAvailableGames([])
       } else {
         setAvailableGames(games)
-        setError('') // Clear any previous errors
+        setError('')
       }
     } catch (error: any) {
       console.error('Error loading games:', error)
@@ -165,14 +160,35 @@ export default function SimulatePage() {
     }
   }
 
-  // Extract betting odds from odds_data
+  // Extract betting odds from odds_data - FIXED VERSION
   const getGameOdds = (game: Game) => {
-    if (!game.odds_data || game.odds_data.length === 0) {
-      return { moneyline: null, spread: null, total: null }
+    console.log('Extracting odds from game:', game.home_team, 'vs', game.away_team)
+    console.log('Odds data type:', typeof game.odds_data)
+    console.log('Odds data:', game.odds_data)
+
+    // Handle if odds_data is null, undefined, or empty
+    if (!game.odds_data) {
+      console.log('No odds_data available')
+      return { moneyline: null, spread: null, total: null, bookmaker: null }
     }
 
-    const firstBookmaker = game.odds_data[0]
-    const result: any = { moneyline: null, spread: null, total: null }
+    // odds_data should be an array of bookmakers
+    const bookmakers = Array.isArray(game.odds_data) ? game.odds_data : []
+    
+    if (bookmakers.length === 0) {
+      console.log('No bookmakers in odds_data')
+      return { moneyline: null, spread: null, total: null, bookmaker: null }
+    }
+
+    const firstBookmaker = bookmakers[0]
+    console.log('First bookmaker:', firstBookmaker)
+
+    const result: any = { 
+      moneyline: null, 
+      spread: null, 
+      total: null,
+      bookmaker: firstBookmaker.title || firstBookmaker.key || 'Unknown'
+    }
 
     if (firstBookmaker && firstBookmaker.markets) {
       firstBookmaker.markets.forEach((market: any) => {
@@ -186,6 +202,7 @@ export default function SimulatePage() {
       })
     }
 
+    console.log('Extracted odds:', result)
     return result
   }
 
@@ -198,13 +215,12 @@ export default function SimulatePage() {
   const runSimulation = async () => {
     if (!selectedGame || !selectedBetType) return
 
-    // Check simulation limits
     const dailyLimit = profile?.daily_simulation_limit || 3
     const currentCount = profile?.daily_simulation_count || 0
     const rollover = profile?.monthly_simulation_rollover || 0
 
     if (currentCount >= dailyLimit + rollover) {
-      setError(`You've reached your daily simulation limit (${dailyLimit} + ${rollover} rollover). Upgrade your plan for more simulations.`)
+      setError(`You've reached your daily simulation limit (${dailyLimit} + ${rollover} rollover).`)
       return
     }
 
@@ -213,32 +229,30 @@ export default function SimulatePage() {
     setPrediction(null)
 
     try {
-      // Get the UI sport key from the database sport key
       const uiSportKey = DB_TO_UI_SPORT_MAP[selectedGame.sport_key]
       
-      console.log('Generating prediction with:', {
+      console.log('Running simulation with:', {
         eventId: selectedGame.id,
         sport: uiSportKey,
         betType: selectedBetType,
         userId: user.id
       })
 
-      // Call API to generate prediction
       const response = await fetch('/api/predictions/generate', {
         method: 'POST',
         headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           eventId: selectedGame.id,
-          sport: uiSportKey, // CRITICAL: Include the sport parameter
+          sport: uiSportKey,
           betType: selectedBetType,
           userId: user.id
         })
       })
 
       const result = await response.json()
+      console.log('API Response:', result)
 
       if (!response.ok) {
         throw new Error(result.error || 'Failed to generate prediction')
@@ -246,7 +260,7 @@ export default function SimulatePage() {
 
       setPrediction(result.prediction || result)
 
-      // Refresh profile to update simulation count
+      // Refresh profile
       const { data: updatedProfile } = await supabase
         .from('profiles')
         .select('*')
@@ -259,7 +273,7 @@ export default function SimulatePage() {
 
     } catch (error: any) {
       console.error('Simulation error:', error)
-      setError(error.message || 'Failed to run simulation. Please try again.')
+      setError(error.message || 'Failed to run simulation.')
     } finally {
       setSimulating(false)
     }
@@ -356,17 +370,19 @@ export default function SimulatePage() {
                 <div className="text-gray-200 leading-relaxed">{prediction.ai_analysis || prediction.aiAnalysis}</div>
               </div>
 
-              <div>
-                <div className="text-sm font-semibold text-gray-400 mb-2">Key Factors</div>
-                <ul className="space-y-2">
-                  {(prediction.key_factors || prediction.keyFactors || []).map((factor: string, index: number) => (
-                    <li key={index} className="flex items-start space-x-2">
-                      <Target className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
-                      <span className="text-gray-300">{factor}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              {(prediction.key_factors || prediction.keyFactors) && (
+                <div>
+                  <div className="text-sm font-semibold text-gray-400 mb-2">Key Factors</div>
+                  <ul className="space-y-2">
+                    {(prediction.key_factors || prediction.keyFactors).map((factor: string, index: number) => (
+                      <li key={index} className="flex items-start space-x-2">
+                        <Target className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
+                        <span className="text-gray-300">{factor}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               <div>
                 <div className="text-sm font-semibold text-gray-400 mb-2">Risk Assessment</div>
@@ -401,7 +417,7 @@ export default function SimulatePage() {
                       setSelectedSport(sport.key)
                       setSelectedGame(null)
                       setSelectedBetType('')
-                      setError('') // Clear error when selecting new sport
+                      setError('')
                     }}
                     className={`p-6 rounded-xl border-2 transition ${
                       selectedSport === sport.key
@@ -434,12 +450,13 @@ export default function SimulatePage() {
                   <div className="text-center py-12">
                     <Calendar className="w-16 h-16 text-gray-500 mx-auto mb-4" />
                     <p className="text-gray-400">No upcoming games available for {selectedSport.toUpperCase()}</p>
-                    <p className="text-gray-500 text-sm mt-2">Try selecting a different sport</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
                     {availableGames.map((game) => {
                       const odds = getGameOdds(game)
+                      const hasOdds = odds.moneyline || odds.spread || odds.total
+                      
                       return (
                         <button
                           key={game.id}
@@ -467,21 +484,23 @@ export default function SimulatePage() {
                             </div>
 
                             {/* Betting Odds */}
-                            {odds.moneyline && (
+                            {hasOdds ? (
                               <div className="grid grid-cols-3 gap-4 pt-4 border-t border-white/10">
                                 {/* Moneyline */}
-                                <div>
-                                  <div className="text-xs text-gray-500 mb-2 flex items-center">
-                                    <DollarSign className="w-3 h-3 mr-1" />
-                                    Moneyline
-                                  </div>
-                                  {odds.moneyline.map((outcome: any, idx: number) => (
-                                    <div key={idx} className="text-sm">
-                                      <span className="text-gray-400">{outcome.name}: </span>
-                                      <span className="text-white font-semibold">{formatOdds(outcome.price)}</span>
+                                {odds.moneyline && (
+                                  <div>
+                                    <div className="text-xs text-gray-500 mb-2 flex items-center">
+                                      <DollarSign className="w-3 h-3 mr-1" />
+                                      Moneyline
                                     </div>
-                                  ))}
-                                </div>
+                                    {odds.moneyline.map((outcome: any, idx: number) => (
+                                      <div key={idx} className="text-sm">
+                                        <span className="text-gray-400">{outcome.name}: </span>
+                                        <span className="text-white font-semibold">{formatOdds(outcome.price)}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
 
                                 {/* Spread */}
                                 {odds.spread && (
@@ -512,6 +531,10 @@ export default function SimulatePage() {
                                     ))}
                                   </div>
                                 )}
+                              </div>
+                            ) : (
+                              <div className="text-sm text-gray-500 pt-4 border-t border-white/10">
+                                Odds not available yet
                               </div>
                             )}
                           </div>
