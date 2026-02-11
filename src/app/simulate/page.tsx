@@ -121,8 +121,6 @@ export default function SimulatePage() {
         throw new Error(`Invalid sport key: ${selectedSport}`)
       }
 
-      console.log(`Loading games for ${selectedSport} (database key: ${dbSportKey})`)
-      
       const { data: games, error: gamesError } = await supabase
         .from('sports_events')
         .select('*')
@@ -135,13 +133,6 @@ export default function SimulatePage() {
       if (gamesError) {
         console.error('Database error:', gamesError)
         throw gamesError
-      }
-
-      console.log(`Found ${games?.length || 0} games`)
-      
-      // DEBUG: Log first game's odds_data structure
-      if (games && games.length > 0) {
-        console.log('ODDS DATA STRUCTURE:', JSON.stringify(games[0].odds_data, null, 2))
       }
 
       if (!games || games.length === 0) {
@@ -160,50 +151,50 @@ export default function SimulatePage() {
     }
   }
 
-  // Extract betting odds from odds_data - FIXED VERSION
+  // Extract betting odds from odds_data - FIXED to handle JSON string
   const getGameOdds = (game: Game) => {
-    console.log('Extracting odds from game:', game.home_team, 'vs', game.away_team)
-    console.log('Odds data type:', typeof game.odds_data)
-    console.log('Odds data:', game.odds_data)
+    try {
+      // Handle if odds_data is null or undefined
+      if (!game.odds_data) {
+        return { moneyline: null, spread: null, total: null, bookmaker: null }
+      }
 
-    // Handle if odds_data is null, undefined, or empty
-    if (!game.odds_data) {
-      console.log('No odds_data available')
+      // Parse if it's a string, otherwise use as-is
+      let bookmakers = game.odds_data
+      if (typeof game.odds_data === 'string') {
+        bookmakers = JSON.parse(game.odds_data)
+      }
+
+      // Ensure it's an array
+      if (!Array.isArray(bookmakers) || bookmakers.length === 0) {
+        return { moneyline: null, spread: null, total: null, bookmaker: null }
+      }
+
+      const firstBookmaker = bookmakers[0]
+      const result: any = { 
+        moneyline: null, 
+        spread: null, 
+        total: null,
+        bookmaker: firstBookmaker.title || firstBookmaker.key || 'Unknown'
+      }
+
+      if (firstBookmaker && firstBookmaker.markets) {
+        firstBookmaker.markets.forEach((market: any) => {
+          if (market.key === 'h2h') {
+            result.moneyline = market.outcomes
+          } else if (market.key === 'spreads') {
+            result.spread = market.outcomes
+          } else if (market.key === 'totals') {
+            result.total = market.outcomes
+          }
+        })
+      }
+
+      return result
+    } catch (error) {
+      console.error('Error parsing odds:', error)
       return { moneyline: null, spread: null, total: null, bookmaker: null }
     }
-
-    // odds_data should be an array of bookmakers
-    const bookmakers = Array.isArray(game.odds_data) ? game.odds_data : []
-    
-    if (bookmakers.length === 0) {
-      console.log('No bookmakers in odds_data')
-      return { moneyline: null, spread: null, total: null, bookmaker: null }
-    }
-
-    const firstBookmaker = bookmakers[0]
-    console.log('First bookmaker:', firstBookmaker)
-
-    const result: any = { 
-      moneyline: null, 
-      spread: null, 
-      total: null,
-      bookmaker: firstBookmaker.title || firstBookmaker.key || 'Unknown'
-    }
-
-    if (firstBookmaker && firstBookmaker.markets) {
-      firstBookmaker.markets.forEach((market: any) => {
-        if (market.key === 'h2h') {
-          result.moneyline = market.outcomes
-        } else if (market.key === 'spreads') {
-          result.spread = market.outcomes
-        } else if (market.key === 'totals') {
-          result.total = market.outcomes
-        }
-      })
-    }
-
-    console.log('Extracted odds:', result)
-    return result
   }
 
   // Format American odds
@@ -231,13 +222,6 @@ export default function SimulatePage() {
     try {
       const uiSportKey = DB_TO_UI_SPORT_MAP[selectedGame.sport_key]
       
-      console.log('Running simulation with:', {
-        eventId: selectedGame.id,
-        sport: uiSportKey,
-        betType: selectedBetType,
-        userId: user.id
-      })
-
       const response = await fetch('/api/predictions/generate', {
         method: 'POST',
         headers: { 
@@ -252,7 +236,6 @@ export default function SimulatePage() {
       })
 
       const result = await response.json()
-      console.log('API Response:', result)
 
       if (!response.ok) {
         throw new Error(result.error || 'Failed to generate prediction')
@@ -495,7 +478,7 @@ export default function SimulatePage() {
                                     </div>
                                     {odds.moneyline.map((outcome: any, idx: number) => (
                                       <div key={idx} className="text-sm">
-                                        <span className="text-gray-400">{outcome.name}: </span>
+                                        <span className="text-gray-400">{outcome.name.split(' ')[0]}: </span>
                                         <span className="text-white font-semibold">{formatOdds(outcome.price)}</span>
                                       </div>
                                     ))}
@@ -508,7 +491,7 @@ export default function SimulatePage() {
                                     <div className="text-xs text-gray-500 mb-2">Spread</div>
                                     {odds.spread.map((outcome: any, idx: number) => (
                                       <div key={idx} className="text-sm">
-                                        <span className="text-gray-400">{outcome.name}: </span>
+                                        <span className="text-gray-400">{outcome.name.split(' ')[0]}: </span>
                                         <span className="text-white font-semibold">
                                           {outcome.point > 0 ? '+' : ''}{outcome.point} ({formatOdds(outcome.price)})
                                         </span>
