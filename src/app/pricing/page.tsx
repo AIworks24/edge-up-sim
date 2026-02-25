@@ -1,17 +1,24 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/database/supabase-client'
 import Link from 'next/link'
+import { Zap, Check, AlertCircle, CreditCard } from 'lucide-react'
 
 export default function PricingPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const isTrialFlow = searchParams.get('trial') === 'true'
+  const wasCanceled = searchParams.get('canceled') === 'true'
+
   const [loading, setLoading] = useState<string | null>(null)
   const [user, setUser] = useState<any>(null)
+  const [profile, setProfile] = useState<any>(null)
   const [promoCode, setPromoCode] = useState('')
   const [promoValid, setPromoValid] = useState<boolean | null>(null)
   const [promoMessage, setPromoMessage] = useState('')
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly')
 
   useEffect(() => {
     checkUser()
@@ -21,6 +28,12 @@ export default function PricingPage() {
     const { data: { session } } = await supabase.auth.getSession()
     if (session?.user) {
       setUser(session.user)
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', session.user.id)
+        .single()
+      setProfile(profileData)
     }
   }
 
@@ -33,11 +46,16 @@ export default function PricingPage() {
     setLoading(tier)
 
     try {
+      const { data: { session } } = await supabase.auth.getSession()
       const response = await fetch('/api/stripe/create-checkout', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`
+        },
         body: JSON.stringify({
           tier,
+          billingCycle,
           promoCode: promoValid ? promoCode : undefined
         })
       })
@@ -57,19 +75,16 @@ export default function PricingPage() {
 
   async function validatePromoCode() {
     if (!promoCode) return
-
     try {
       const response = await fetch('/api/stripe/validate-promo', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code: promoCode })
       })
-
       const data = await response.json()
-
       setPromoValid(data.valid)
       setPromoMessage(data.message || data.discount || '')
-    } catch (error) {
+    } catch {
       setPromoValid(false)
       setPromoMessage('Error validating code')
     }
@@ -77,9 +92,10 @@ export default function PricingPage() {
 
   const plans = [
     {
-      id: 'starter',
+      id: 'starter' as const,
       name: 'Edge Starter',
-      price: 29,
+      monthlyPrice: 29,
+      annualPrice: 23,
       description: 'Perfect for casual bettors',
       features: [
         '3 personalized hot picks daily',
@@ -89,12 +105,14 @@ export default function PricingPage() {
         'Basic performance analytics',
         'Edge score calculations'
       ],
-      popular: false
+      popular: false,
+      color: 'from-blue-500 to-cyan-500'
     },
     {
-      id: 'pro',
+      id: 'pro' as const,
       name: 'Edge Pro',
-      price: 99,
+      monthlyPrice: 99,
+      annualPrice: 79,
       description: 'For serious bettors',
       features: [
         '3 personalized hot picks daily',
@@ -105,12 +123,14 @@ export default function PricingPage() {
         'Edge score & ROI tracking',
         'Historical performance data'
       ],
-      popular: true
+      popular: true,
+      color: 'from-purple-500 to-pink-500'
     },
     {
-      id: 'elite',
+      id: 'elite' as const,
       name: 'Edge Elite',
-      price: 249,
+      monthlyPrice: 249,
+      annualPrice: 199,
       description: 'Maximum edge, unlimited power',
       features: [
         '3 personalized hot picks daily',
@@ -122,68 +142,107 @@ export default function PricingPage() {
         'Full historical data access',
         'Premium support'
       ],
-      popular: false
+      popular: false,
+      color: 'from-amber-500 to-orange-500'
     }
   ]
 
+  const hasActiveSub = profile?.subscription_status === 'active' || profile?.subscription_status === 'trialing'
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-white to-gray-50">
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800">
       {/* Header */}
-      <header className="border-b border-gray-200 bg-white">
+      <header className="border-b border-white/10 bg-slate-900/50 backdrop-blur">
         <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center">
-            <Link href="/">
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent cursor-pointer">
-                Edge Up Sim
-              </h1>
+            <Link href="/" className="flex items-center space-x-2">
+              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                <Zap className="w-5 h-5 text-white" />
+              </div>
+              <span className="text-xl font-bold text-white">Edge Up Sim</span>
             </Link>
-            {user ? (
+            {hasActiveSub ? (
               <button
                 onClick={() => router.push('/dashboard')}
-                className="px-4 py-2 text-gray-700 hover:text-gray-900 font-medium"
+                className="px-4 py-2 text-white bg-white/10 hover:bg-white/20 rounded-lg font-medium transition"
               >
                 Go to Dashboard
               </button>
-            ) : (
-              <div className="flex gap-4">
-                <button
-                  onClick={() => router.push('/login')}
-                  className="px-4 py-2 text-gray-700 hover:text-gray-900 font-medium"
-                >
-                  Sign In
-                </button>
-                <button
-                  onClick={() => router.push('/register')}
-                  className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-semibold"
-                >
-                  Sign Up
-                </button>
-              </div>
-            )}
+            ) : user && !isTrialFlow ? (
+              <button
+                onClick={() => router.push('/dashboard')}
+                className="px-4 py-2 text-gray-400 hover:text-white font-medium transition"
+              >
+                Skip for now
+              </button>
+            ) : null}
           </div>
         </div>
       </header>
 
+      {/* Trial Required Banner */}
+      {isTrialFlow && (
+        <div className="bg-gradient-to-r from-blue-600 to-purple-600 py-4 px-4">
+          <div className="max-w-7xl mx-auto flex items-center justify-center gap-3">
+            <CreditCard className="w-5 h-5 text-white flex-shrink-0" />
+            <p className="text-white font-semibold text-center">
+              🎉 Account created! Choose your plan to start your 3-day free trial — your card won't be charged until day 4.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Canceled Banner */}
+      {wasCanceled && (
+        <div className="bg-yellow-500/20 border-b border-yellow-500/30 py-3 px-4">
+          <div className="max-w-7xl mx-auto flex items-center justify-center gap-2">
+            <AlertCircle className="w-4 h-4 text-yellow-400" />
+            <p className="text-yellow-300 text-sm">Checkout was canceled. Please select a plan to continue.</p>
+          </div>
+        </div>
+      )}
+
       {/* Hero */}
-      <section className="py-16 px-4 sm:px-6 lg:px-8">
+      <section className="py-12 px-4">
         <div className="max-w-7xl mx-auto text-center">
-          <h2 className="text-5xl font-bold text-gray-900 mb-4">
-            Choose Your Plan
+          <h2 className="text-4xl font-bold text-white mb-3">
+            {isTrialFlow ? 'Start Your Free Trial' : 'Choose Your Plan'}
           </h2>
-          <p className="text-xl text-gray-600 mb-2">
-            Start with a 3-day free trial. No credit card required until trial ends.
+          <p className="text-gray-400 text-lg mb-6">
+            3-day free trial • Cancel anytime • Card charged after trial ends
           </p>
-          <p className="text-lg text-gray-600">
-            Save 20% with annual billing
-          </p>
+
+          {/* Billing Toggle */}
+          <div className="inline-flex items-center bg-white/10 rounded-full p-1 mb-8">
+            <button
+              onClick={() => setBillingCycle('monthly')}
+              className={`px-6 py-2 rounded-full text-sm font-semibold transition ${
+                billingCycle === 'monthly'
+                  ? 'bg-white text-slate-900'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              Monthly
+            </button>
+            <button
+              onClick={() => setBillingCycle('annual')}
+              className={`px-6 py-2 rounded-full text-sm font-semibold transition ${
+                billingCycle === 'annual'
+                  ? 'bg-white text-slate-900'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              Annual <span className="text-green-400 ml-1">Save 20%</span>
+            </button>
+          </div>
         </div>
       </section>
 
       {/* Promo Code */}
       {user && (
-        <section className="max-w-md mx-auto px-4 mb-12">
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+        <section className="max-w-md mx-auto px-4 mb-8">
+          <div className="bg-white/5 border border-white/10 rounded-lg p-4">
+            <label className="block text-sm font-medium text-gray-300 mb-2">
               Have a promo code?
             </label>
             <div className="flex gap-2">
@@ -194,18 +253,18 @@ export default function PricingPage() {
                   setPromoCode(e.target.value.toUpperCase())
                   setPromoValid(null)
                 }}
-                placeholder="PROMO CODE"
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg"
+                placeholder="ENTER CODE"
+                className="flex-1 px-4 py-2 bg-white/10 border border-white/20 text-white rounded-lg placeholder-gray-500 focus:outline-none focus:border-blue-500"
               />
               <button
                 onClick={validatePromoCode}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700"
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition"
               >
                 Apply
               </button>
             </div>
             {promoValid !== null && (
-              <p className={`mt-2 text-sm ${promoValid ? 'text-green-600' : 'text-red-600'}`}>
+              <p className={`mt-2 text-sm ${promoValid ? 'text-green-400' : 'text-red-400'}`}>
                 {promoMessage}
               </p>
             )}
@@ -215,119 +274,79 @@ export default function PricingPage() {
 
       {/* Pricing Cards */}
       <section className="max-w-7xl mx-auto px-4 pb-20 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {plans.map((plan) => (
-            <div
-              key={plan.id}
-              className={`bg-white rounded-2xl shadow-lg overflow-hidden ${
-                plan.popular ? 'ring-2 ring-blue-600 transform scale-105' : ''
-              }`}
-            >
-              {plan.popular && (
-                <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white text-center py-2 font-semibold">
-                  MOST POPULAR
-                </div>
-              )}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {plans.map((plan) => {
+            const price = billingCycle === 'annual' ? plan.annualPrice : plan.monthlyPrice
+            return (
+              <div
+                key={plan.id}
+                className={`relative rounded-2xl overflow-hidden border transition-transform hover:-translate-y-1 ${
+                  plan.popular
+                    ? 'border-purple-500 bg-gradient-to-b from-purple-900/50 to-slate-900'
+                    : 'border-white/10 bg-white/5'
+                }`}
+              >
+                {plan.popular && (
+                  <div className="bg-gradient-to-r from-purple-500 to-pink-500 text-white text-center py-1.5 text-xs font-bold uppercase tracking-wider">
+                    ⭐ Most Popular
+                  </div>
+                )}
 
-              <div className="p-8">
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">{plan.name}</h3>
-                <p className="text-gray-600 mb-6">{plan.description}</p>
+                <div className="p-6">
+                  <div className={`inline-flex p-2 rounded-lg bg-gradient-to-br ${plan.color} mb-4`}>
+                    <Zap className="w-5 h-5 text-white" />
+                  </div>
+                  <h3 className="text-xl font-bold text-white mb-1">{plan.name}</h3>
+                  <p className="text-gray-400 text-sm mb-4">{plan.description}</p>
 
-                <div className="mb-6">
-                  <span className="text-5xl font-bold text-gray-900">${plan.price}</span>
-                  <span className="text-xl text-gray-600">/month</span>
-                  {promoValid && (
-                    <div className="mt-2">
-                      <span className="text-sm text-green-600 font-semibold">
-                        {promoMessage} applied!
+                  <div className="mb-6">
+                    <span className="text-4xl font-bold text-white">${price}</span>
+                    <span className="text-gray-400">/month</span>
+                    {billingCycle === 'annual' && (
+                      <p className="text-green-400 text-sm mt-1">
+                        Billed ${price * 12}/year (save ${(plan.monthlyPrice - price) * 12})
+                      </p>
+                    )}
+                  </div>
+
+                  <ul className="space-y-2 mb-6">
+                    {plan.features.map((feature) => (
+                      <li key={feature} className="flex items-start gap-2 text-sm text-gray-300">
+                        <Check className="w-4 h-4 text-green-400 flex-shrink-0 mt-0.5" />
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+
+                  <button
+                    onClick={() => handleSelectPlan(plan.id)}
+                    disabled={loading !== null}
+                    className={`w-full py-3 rounded-xl font-semibold transition ${
+                      plan.popular
+                        ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:shadow-lg hover:shadow-purple-500/30'
+                        : 'bg-white/10 text-white hover:bg-white/20'
+                    } disabled:opacity-50`}
+                  >
+                    {loading === plan.id ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Redirecting to checkout...
                       </span>
-                    </div>
-                  )}
+                    ) : (
+                      `Start 3-Day Free Trial`
+                    )}
+                  </button>
                 </div>
-
-                <button
-                  onClick={() => handleSelectPlan(plan.id as any)}
-                  disabled={loading !== null}
-                  className={`w-full py-3 px-6 rounded-xl font-semibold transition-all ${
-                    plan.popular
-                      ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:shadow-xl'
-                      : 'bg-gray-900 text-white hover:bg-gray-800'
-                  } disabled:opacity-50 disabled:cursor-not-allowed`}
-                >
-                  {loading === plan.id ? (
-                    <span className="flex items-center justify-center">
-                      <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                    </span>
-                  ) : user ? (
-                    'Start Free Trial'
-                  ) : (
-                    'Sign Up to Start'
-                  )}
-                </button>
-
-                <ul className="mt-8 space-y-4">
-                  {plan.features.map((feature, idx) => (
-                    <li key={idx} className="flex items-start">
-                      <svg className="w-6 h-6 text-green-500 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                      <span className="text-gray-700">{feature}</span>
-                    </li>
-                  ))}
-                </ul>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
 
-        {/* Annual Discount Info */}
-        <div className="mt-12 text-center">
-          <div className="inline-block bg-blue-50 rounded-lg px-6 py-4">
-            <p className="text-lg text-gray-900">
-              <span className="font-bold text-blue-600">Save 20%</span> with annual billing
-            </p>
-            <p className="text-sm text-gray-600 mt-1">
-              Starter: $278/year • Pro: $950/year • Elite: $2,390/year
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* FAQ */}
-      <section className="bg-gray-50 py-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-3xl mx-auto">
-          <h3 className="text-3xl font-bold text-center text-gray-900 mb-12">
-            Frequently Asked Questions
-          </h3>
-          <div className="space-y-6">
-            <div className="bg-white rounded-lg p-6 shadow">
-              <h4 className="font-bold text-gray-900 mb-2">How does the 3-day free trial work?</h4>
-              <p className="text-gray-600">
-                Start using Edge Up Sim immediately with full access to your chosen plan. You won't be charged until after 3 days. Cancel anytime during the trial at no cost.
-              </p>
-            </div>
-            <div className="bg-white rounded-lg p-6 shadow">
-              <h4 className="font-bold text-gray-900 mb-2">Can I change plans later?</h4>
-              <p className="text-gray-600">
-                Yes! Upgrade or downgrade your plan anytime from your account settings. Changes take effect immediately.
-              </p>
-            </div>
-            <div className="bg-white rounded-lg p-6 shadow">
-              <h4 className="font-bold text-gray-900 mb-2">What payment methods do you accept?</h4>
-              <p className="text-gray-600">
-                We accept all major credit cards (Visa, Mastercard, American Express) through our secure Stripe payment processor.
-              </p>
-            </div>
-            <div className="bg-white rounded-lg p-6 shadow">
-              <h4 className="font-bold text-gray-900 mb-2">Is my data secure?</h4>
-              <p className="text-gray-600">
-                Absolutely. We use industry-standard encryption and never store your payment information. All payments are processed securely through Stripe.
-              </p>
-            </div>
-          </div>
+        {/* Trust Footer */}
+        <div className="mt-10 text-center">
+          <p className="text-gray-400 text-sm">
+            🔒 Powered by Stripe • 256-bit SSL encryption • Cancel anytime during trial
+          </p>
         </div>
       </section>
     </div>
