@@ -29,10 +29,7 @@ export default function LoginPage() {
       if (data.user) {
         await supabase
           .from('profiles')
-          .update({
-            last_login_at: new Date().toISOString(),
-            login_count: supabase.rpc('increment', { x: 1 })
-          })
+          .update({ last_login_at: new Date().toISOString() })
           .eq('id', data.user.id)
       }
 

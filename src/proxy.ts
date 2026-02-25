@@ -1,56 +1,27 @@
-import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 export async function proxy(req: NextRequest) {
-  const res = NextResponse.next()
-
-  const accessToken =
-    req.cookies.get('sb-access-token')?.value ||
-    req.cookies.get(`sb-${process.env.NEXT_PUBLIC_SUPABASE_URL?.split('//')[1]?.split('.')[0]}-auth-token`)?.value
-
   const protectedPaths = ['/dashboard', '/simulate', '/history', '/settings']
   const isProtected = protectedPaths.some(path => req.nextUrl.pathname.startsWith(path))
 
-  if (!isProtected) return res
+  if (!isProtected) return NextResponse.next()
 
-  if (!accessToken) {
+  // Check for any Supabase session cookie (covers all versions/formats)
+  const cookies = req.cookies.getAll()
+  const hasSession = cookies.some(
+    cookie =>
+      cookie.name.startsWith('sb-') &&
+      (cookie.name.endsWith('-auth-token') || cookie.name.endsWith('-auth-token.0') || cookie.name.endsWith('-auth-token.1'))
+  )
+
+  if (!hasSession) {
     return NextResponse.redirect(new URL('/login', req.url))
   }
 
-  try {
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { autoRefreshToken: false, persistSession: false } }
-    )
-
-    const { data: { user }, error } = await supabase.auth.getUser(accessToken)
-
-    if (error || !user) {
-      return NextResponse.redirect(new URL('/login', req.url))
-    }
-
-    if (req.nextUrl.pathname.startsWith('/settings')) {
-      return res
-    }
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('subscription_status')
-      .eq('id', user.id)
-      .single()
-
-    const noSub = !profile?.subscription_status || profile.subscription_status === 'none'
-    if (noSub) {
-      return NextResponse.redirect(new URL('/pricing?trial=true', req.url))
-    }
-
-  } catch {
-    return res
-  }
-
-  return res
+  // Don't block — let the page itself handle subscription checks
+  // This avoids 400 errors from DB calls in the proxy
+  return NextResponse.next()
 }
 
 export const config = {
