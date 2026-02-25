@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/database/supabase-client'
 import Link from 'next/link'
 import { Zap, Check, AlertCircle, CreditCard } from 'lucide-react'
 
-export default function PricingPage() {
+// ─── Inner component that uses useSearchParams ───────────────────────────────
+function PricingContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const isTrialFlow = searchParams.get('trial') === 'true'
@@ -42,9 +43,7 @@ export default function PricingPage() {
       router.push('/register')
       return
     }
-
     setLoading(tier)
-
     try {
       const { data: { session } } = await supabase.auth.getSession()
       const response = await fetch('/api/stripe/create-checkout', {
@@ -59,9 +58,7 @@ export default function PricingPage() {
           promoCode: promoValid ? promoCode : undefined
         })
       })
-
       const data = await response.json()
-
       if (data.url) {
         window.location.href = data.url
       } else {
@@ -147,7 +144,9 @@ export default function PricingPage() {
     }
   ]
 
-  const hasActiveSub = profile?.subscription_status === 'active' || profile?.subscription_status === 'trialing'
+  const hasActiveSub =
+    profile?.subscription_status === 'active' ||
+    profile?.subscription_status === 'trialing'
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800">
@@ -197,7 +196,9 @@ export default function PricingPage() {
         <div className="bg-yellow-500/20 border-b border-yellow-500/30 py-3 px-4">
           <div className="max-w-7xl mx-auto flex items-center justify-center gap-2">
             <AlertCircle className="w-4 h-4 text-yellow-400" />
-            <p className="text-yellow-300 text-sm">Checkout was canceled. Please select a plan to continue.</p>
+            <p className="text-yellow-300 text-sm">
+              Checkout was canceled. Please select a plan to continue.
+            </p>
           </div>
         </div>
       )}
@@ -291,14 +292,12 @@ export default function PricingPage() {
                     ⭐ Most Popular
                   </div>
                 )}
-
                 <div className="p-6">
                   <div className={`inline-flex p-2 rounded-lg bg-gradient-to-br ${plan.color} mb-4`}>
                     <Zap className="w-5 h-5 text-white" />
                   </div>
                   <h3 className="text-xl font-bold text-white mb-1">{plan.name}</h3>
                   <p className="text-gray-400 text-sm mb-4">{plan.description}</p>
-
                   <div className="mb-6">
                     <span className="text-4xl font-bold text-white">${price}</span>
                     <span className="text-gray-400">/month</span>
@@ -308,7 +307,6 @@ export default function PricingPage() {
                       </p>
                     )}
                   </div>
-
                   <ul className="space-y-2 mb-6">
                     {plan.features.map((feature) => (
                       <li key={feature} className="flex items-start gap-2 text-sm text-gray-300">
@@ -317,7 +315,6 @@ export default function PricingPage() {
                       </li>
                     ))}
                   </ul>
-
                   <button
                     onClick={() => handleSelectPlan(plan.id)}
                     disabled={loading !== null}
@@ -333,7 +330,7 @@ export default function PricingPage() {
                         Redirecting to checkout...
                       </span>
                     ) : (
-                      `Start 3-Day Free Trial`
+                      'Start 3-Day Free Trial'
                     )}
                   </button>
                 </div>
@@ -350,5 +347,23 @@ export default function PricingPage() {
         </div>
       </section>
     </div>
+  )
+}
+
+// ─── Loading fallback ─────────────────────────────────────────────────────────
+function PricingLoading() {
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex items-center justify-center">
+      <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+}
+
+// ─── Default export wraps inner component in Suspense ────────────────────────
+export default function PricingPage() {
+  return (
+    <Suspense fallback={<PricingLoading />}>
+      <PricingContent />
+    </Suspense>
   )
 }
