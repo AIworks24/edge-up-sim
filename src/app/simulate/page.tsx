@@ -120,28 +120,33 @@ export default function SimulatePage() {
     }
     setSimulating(true); setError(''); setPrediction(null)
     try {
-      const odds = getGameOdds(selectedGame)
-      const raw  = (odds.raw as any) || {}
-      const response = await fetch('/api/predictions/generate', {
+      const oddsResult = getGameOdds(selectedGame)
+      const raw = (oddsResult.raw as any) || {}
+      const response = await fetch('/api/simulate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          eventId:         selectedGame.external_event_id || selectedGame.id,
+          event_id:        selectedGame.id,
           sport:           selectedGame.sport_key,
-          betType:         selectedBetType,
-          userId:          user.id,
+          bet_type:        selectedBetType,
+          user_id:         user.id,
           home_team:       selectedGame.home_team,
           away_team:       selectedGame.away_team,
           home_team_sr_id: selectedGame.home_team_sr_id,
           away_team_sr_id: selectedGame.away_team_sr_id,
-          spread_home:     raw.spread_home    ?? null,
-          total:           raw.total          ?? null,
-          moneyline_home:  raw.moneyline_home ?? null,
-          moneyline_away:  raw.moneyline_away ?? null,
+          spread_home:     raw.spread_home      ?? 0,
+          total:           raw.total            ?? 140,
+          odds_spread:     raw.spread_home_odds ?? -110,
+          odds_total:      raw.total_over_odds  ?? -110,
+          odds_ml_home:    raw.moneyline_home   ?? -150,
+          odds_ml_away:    raw.moneyline_away   ?? 130,
+          neutral_site:    false,
+          game_time:       selectedGame.commence_time,
         }),
       })
       const result = await response.json()
       if (!response.ok) throw new Error(result.error || 'Failed to generate prediction')
+      // /api/simulate returns the result object directly
       setPrediction(result.prediction || result)
       const { data: updated } = await supabase
         .from('profiles').select('*').eq('id', user.id).single()
@@ -199,21 +204,21 @@ export default function SimulatePage() {
               <div className="bg-white/5 rounded-xl p-4 text-center">
                 <div className="text-sm text-gray-400 mb-1">Edge Score</div>
                 <div className={`text-2xl font-bold ${
-                  (prediction.edge_score ?? prediction.edgeScore ?? 0) >= 20 ? 'text-green-400' :
-                  (prediction.edge_score ?? prediction.edgeScore ?? 0) >= 12 ? 'text-yellow-400' : 'text-red-400'
-                }`}>{prediction.edge_score ?? prediction.edgeScore ?? 0}%</div>
+                  (prediction.edge_up_score ?? prediction.edge_score ?? 0) >= 20 ? 'text-green-400' :
+                  (prediction.edge_up_score ?? prediction.edge_score ?? 0) >= 12 ? 'text-yellow-400' : 'text-red-400'
+                }`}>{prediction.edge_up_score ?? prediction.edge_score ?? 0}%</div>
               </div>
               <div className="bg-white/5 rounded-xl p-4 text-center">
                 <div className="text-sm text-gray-400 mb-1">Confidence</div>
-                <div className="text-2xl font-bold text-blue-400">{prediction.confidence_tier || prediction.confidenceTier || 'N/A'}</div>
+                <div className="text-2xl font-bold text-blue-400">{prediction.edge_tier || prediction.confidence_tier || 'N/A'}</div>
               </div>
               <div className="bg-white/5 rounded-xl p-4 text-center">
                 <div className="text-sm text-gray-400 mb-1">Recommendation</div>
-                <div className="text-lg font-bold text-white">{prediction.recommended_bet || prediction.recommendedBet || '—'}</div>
+                <div className="text-lg font-bold text-white">{prediction.bet_side || prediction.recommended_bet || '—'}</div>
               </div>
               <div className="bg-white/5 rounded-xl p-4 text-center">
                 <div className="text-sm text-gray-400 mb-1">Bet Type</div>
-                <div className="text-lg font-bold text-white capitalize">{selectedBetType}</div>
+                <div className="text-lg font-bold text-white capitalize">{prediction.bet_type || selectedBetType}</div>
               </div>
             </div>
             {(prediction.analysis || prediction.reasoning) && (
@@ -222,10 +227,14 @@ export default function SimulatePage() {
                 <div className="text-gray-300 leading-relaxed">{prediction.analysis || prediction.reasoning}</div>
               </div>
             )}
-            {(prediction.risk_assessment || prediction.riskAssessment) && (
+            {(prediction.risk_factors?.[0] || prediction.risk_assessment || prediction.riskAssessment) && (
               <div className="bg-white/5 rounded-xl p-4">
                 <div className="text-sm font-semibold text-gray-400 mb-2">Risk Assessment</div>
-                <div className="text-orange-300">{prediction.risk_assessment || prediction.riskAssessment}</div>
+                <div className="text-orange-300">
+                  {Array.isArray(prediction.risk_factors)
+                    ? prediction.risk_factors.join(' • ')
+                    : (prediction.risk_assessment || prediction.riskAssessment)}
+                </div>
               </div>
             )}
             <button onClick={resetForm}
