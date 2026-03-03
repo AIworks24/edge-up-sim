@@ -188,6 +188,7 @@ export default function SimulatePage() {
           <p className="text-gray-400">Select a sport, game, and bet type to get your edge analysis.</p>
         </div>
 
+        {/* ── Results ── unchanged from your original ── */}
         {prediction && (
           <div className="bg-slate-800/50 backdrop-blur-xl border border-green-500/30 rounded-2xl p-8">
             <div className="flex items-center space-x-3 mb-6">
@@ -234,8 +235,10 @@ export default function SimulatePage() {
           </div>
         )}
 
+        {/* ── Form ── */}
         {!prediction && (
           <>
+            {/* Step 1: Select Sport — unchanged */}
             <div className="bg-slate-800/50 backdrop-blur-xl border border-white/10 rounded-2xl p-8">
               <div className="flex items-center space-x-3 mb-6">
                 <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold">1</div>
@@ -254,96 +257,174 @@ export default function SimulatePage() {
               </div>
             </div>
 
+            {/* Step 2: Select Game — NOW with scroll box, compact cards, inline Step 3 + Run */}
             {selectedSport && (
               <div className="bg-slate-800/50 backdrop-blur-xl border border-white/10 rounded-2xl p-8">
-                <div className="flex items-center space-x-3 mb-6">
-                  <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold">2</div>
-                  <h2 className="text-2xl font-bold text-white">Select Game</h2>
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold">2</div>
+                    <h2 className="text-2xl font-bold text-white">Select Game</h2>
+                  </div>
+                  {availableGames.length > 0 && (
+                    <span className="text-sm text-gray-400">{availableGames.length} games available</span>
+                  )}
                 </div>
+
+                {/* Loading state */}
                 {loadingGames ? (
                   <div className="flex items-center justify-center py-12">
                     <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-                    <span className="ml-3 text-gray-400">Loading live games from SportRadar...</span>
+                    <span className="ml-3 text-gray-400">Loading live games...</span>
                   </div>
+
                 ) : error ? (
                   <div className="text-center py-8">
                     <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-3" />
                     <p className="text-yellow-300 mb-4">{error}</p>
-                    <button onClick={loadGames} className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition">Try Again</button>
+                    <button onClick={loadGames}
+                      className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition">
+                      Try Again
+                    </button>
                   </div>
+
                 ) : availableGames.length === 0 ? (
                   <div className="text-center py-12">
                     <Calendar className="w-16 h-16 text-gray-500 mx-auto mb-4" />
                     <p className="text-gray-400">No upcoming {selectedSport.toUpperCase()} games at this time.</p>
                   </div>
+
                 ) : (
-                  <div className="space-y-3">
-                    {availableGames.map(game => {
-                      const odds = getGameOdds(game)
-                      const ml   = odds.moneyline as any
-                      const sp   = odds.spread    as any
-                      const tot  = odds.total     as any
-                      return (
-                        <button key={game.id}
-                          onClick={() => { setSelectedGame(game); setSelectedBetType('') }}
-                          className={`w-full p-6 rounded-xl border-2 transition text-left ${selectedGame?.id === game.id ? 'border-blue-500 bg-blue-500/10' : 'border-white/10 bg-white/5 hover:border-white/20'}`}>
-                          <div className="flex items-center justify-between mb-3">
-                            <div>
-                              <div className="text-xs text-gray-400 mb-1">{game.sport_title || game.sport_key?.toUpperCase()}</div>
-                              <div className="text-white font-bold text-lg">{game.away_team} @ {game.home_team}</div>
-                              <div className="text-gray-400 text-sm">{new Date(game.commence_time).toLocaleString()}</div>
+                  <div className="space-y-4">
+
+                    {/* ── Scrollable game list ── */}
+                    <div className="max-h-[600px] overflow-y-auto space-y-2 pr-1">
+                      {availableGames.map(game => {
+                        const odds = getGameOdds(game)
+                        const ml   = odds.moneyline as any
+                        const sp   = odds.spread    as any
+                        const tot  = odds.total     as any
+                        const isSelected = selectedGame?.id === game.id
+
+                        return (
+                          <button key={game.id}
+                            onClick={() => { setSelectedGame(game); setSelectedBetType('') }}
+                            className={`w-full p-4 rounded-xl border-2 transition text-left ${
+                              isSelected
+                                ? 'border-blue-500 bg-blue-500/10'
+                                : 'border-white/10 bg-white/5 hover:border-white/20'
+                            }`}>
+
+                            {/* Compact single-row layout */}
+                            <div className="flex items-center justify-between gap-3">
+
+                              {/* Team names + time */}
+                              <div className="flex-1 min-w-0">
+                                <div className="text-white font-semibold truncate">
+                                  {game.away_team} @ {game.home_team}
+                                </div>
+                                <div className="text-gray-400 text-xs mt-0.5">
+                                  {new Date(game.commence_time).toLocaleString([], {
+                                    weekday: 'short', month: 'short', day: 'numeric',
+                                    hour: '2-digit', minute: '2-digit'
+                                  })}
+                                </div>
+                              </div>
+
+                              {/* Compact odds pills */}
+                              <div className="flex items-center gap-2 flex-shrink-0 text-xs">
+                                {ml && (
+                                  <span className="bg-white/10 rounded px-2 py-1 text-gray-300 whitespace-nowrap">
+                                    ML {ml.home} / {ml.away}
+                                  </span>
+                                )}
+                                {sp && (
+                                  <span className="bg-white/10 rounded px-2 py-1 text-gray-300 whitespace-nowrap">
+                                    {sp.home}
+                                  </span>
+                                )}
+                                {tot && (
+                                  <span className="bg-white/10 rounded px-2 py-1 text-gray-300 whitespace-nowrap">
+                                    {tot.over}
+                                  </span>
+                                )}
+                                {!ml && !sp && !tot && (
+                                  <span className="text-gray-500 italic text-xs">No odds yet</span>
+                                )}
+                              </div>
+
+                              <ChevronDown className={`w-4 h-4 flex-shrink-0 transition ${
+                                isSelected ? 'rotate-180 text-blue-400' : 'text-gray-400'
+                              }`} />
                             </div>
-                            <ChevronDown className={`w-5 h-5 text-gray-400 ml-4 flex-shrink-0 transition ${selectedGame?.id === game.id ? 'rotate-180' : ''}`} />
+                          </button>
+                        )
+                      })}
+                    </div>
+                    {/* ── end scroll box ── */}
+
+                    {/* ── Inline Step 3 + Run — appear below list when a game is selected ── */}
+                    {selectedGame && (
+                      <div className="pt-6 border-t border-white/10 space-y-6">
+
+                        {/* Selected game confirmation chip */}
+                        <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
+                          <div className="text-blue-400 text-xs font-semibold uppercase tracking-wide mb-1">Selected Game</div>
+                          <div className="text-white font-bold">{selectedGame.away_team} @ {selectedGame.home_team}</div>
+                          <div className="text-gray-400 text-sm">
+                            {new Date(selectedGame.commence_time).toLocaleString([], {
+                              weekday: 'long', month: 'short', day: 'numeric',
+                              hour: '2-digit', minute: '2-digit'
+                            })}
                           </div>
-                          {(ml || sp || tot) ? (
-                            <div className="grid grid-cols-3 gap-3 pt-3 border-t border-white/10">
-                              {ml && <div><div className="text-xs text-gray-500 mb-1">Moneyline</div><div className="text-sm text-white font-semibold">{game.home_team.split(' ').pop()}: {ml.home}</div><div className="text-sm text-white font-semibold">{game.away_team.split(' ').pop()}: {ml.away}</div></div>}
-                              {sp && <div><div className="text-xs text-gray-500 mb-1">Spread</div><div className="text-sm text-white font-semibold">{sp.home}</div><div className="text-sm text-white font-semibold">{sp.away}</div></div>}
-                              {tot && <div><div className="text-xs text-gray-500 mb-1">Total</div><div className="text-sm text-white font-semibold">{tot.over}</div><div className="text-sm text-white font-semibold">{tot.under}</div></div>}
-                            </div>
-                          ) : (
-                            <div className="text-xs text-gray-500 pt-3 border-t border-white/10">Odds not yet posted</div>
-                          )}
-                        </button>
-                      )
-                    })}
+                        </div>
+
+                        {/* Step 3: Bet Type */}
+                        <div>
+                          <div className="flex items-center space-x-3 mb-4">
+                            <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold">3</div>
+                            <h2 className="text-2xl font-bold text-white">Select Bet Type</h2>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            {betTypes.map(bt => (
+                              <button key={bt.key} onClick={() => setSelectedBetType(bt.key)}
+                                className={`p-6 rounded-xl border-2 transition text-left ${
+                                  selectedBetType === bt.key
+                                    ? 'border-blue-500 bg-blue-500/10'
+                                    : 'border-white/10 bg-white/5 hover:border-white/20'
+                                }`}>
+                                <div className="text-white font-bold text-lg mb-1">{bt.name}</div>
+                                <div className="text-gray-400 text-sm">{bt.description}</div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Run button */}
+                        {selectedBetType && (
+                          <button onClick={runSimulation} disabled={simulating}
+                            className="w-full py-5 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 disabled:opacity-50 text-white rounded-2xl font-bold text-xl transition shadow-xl shadow-blue-500/30">
+                            {simulating ? (
+                              <span className="flex items-center justify-center space-x-3">
+                                <Loader2 className="w-6 h-6 animate-spin" /><span>Running Simulation...</span>
+                              </span>
+                            ) : (
+                              <span className="flex items-center justify-center space-x-3">
+                                <Zap className="w-6 h-6" /><span>Run Simulation</span>
+                              </span>
+                            )}
+                          </button>
+                        )}
+
+                      </div>
+                    )}
+                    {/* ── end inline Step 3 ── */}
+
                   </div>
                 )}
               </div>
             )}
+            {/* ── end Step 2 ── */}
 
-            {selectedGame && (
-              <div className="bg-slate-800/50 backdrop-blur-xl border border-white/10 rounded-2xl p-8">
-                <div className="flex items-center space-x-3 mb-6">
-                  <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold">3</div>
-                  <h2 className="text-2xl font-bold text-white">Select Bet Type</h2>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {betTypes.map(bt => (
-                    <button key={bt.key} onClick={() => setSelectedBetType(bt.key)}
-                      className={`p-6 rounded-xl border-2 transition text-left ${selectedBetType === bt.key ? 'border-blue-500 bg-blue-500/10' : 'border-white/10 bg-white/5 hover:border-white/20'}`}>
-                      <div className="text-white font-bold text-lg mb-1">{bt.name}</div>
-                      <div className="text-gray-400 text-sm">{bt.description}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {selectedGame && selectedBetType && (
-              <button onClick={runSimulation} disabled={simulating}
-                className="w-full py-5 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 disabled:opacity-50 text-white rounded-2xl font-bold text-xl transition shadow-xl shadow-blue-500/30">
-                {simulating ? (
-                  <span className="flex items-center justify-center space-x-3">
-                    <Loader2 className="w-6 h-6 animate-spin" /><span>Running Simulation...</span>
-                  </span>
-                ) : (
-                  <span className="flex items-center justify-center space-x-3">
-                    <Zap className="w-6 h-6" /><span>Run Simulation</span>
-                  </span>
-                )}
-              </button>
-            )}
           </>
         )}
       </main>
