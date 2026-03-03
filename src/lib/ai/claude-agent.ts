@@ -1,289 +1,302 @@
+// src/lib/ai/claude-agent.ts
+//
+// FIXES vs original guide:
+//   1. Table name: ai_predictions (NOT predictions — that table doesn't exist)
+//   2. Table name: profiles (NOT user_profiles — that table doesn't exist)
+//   3. sim_count_today column lives on profiles (not a separate table)
+//   4. Import paths all corrected to match actual file locations
+// ─────────────────────────────────────────────────────────────────────────────
+
 import Anthropic from '@anthropic-ai/sdk'
-import { supabaseAdmin } from '@/lib/database/supabase-admin'
+import { runCBBSimulation, CBBGameInput, CBBSimResults, CBB_PARAMS } from './engines/cbb-sim-engine'
+import { getTeamStats } from '../sportradar/stats'
+import { classifyEdgeScore, RECOMMENDATION_THRESHOLD } from './edge-classifier'
+import { EDGE_UP_SIM_SYSTEM_PROMPT } from './prompts/system-prompt'
+import { supabaseAdmin } from '../database/supabase-admin'
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY || ''
-})
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
-export interface PredictionInput {
-  eventId: string
-  sport: string
-  betType: 'moneyline' | 'spread' | 'total'
-  userId?: string
-  isHotPick?: boolean
+// ── Request / Response types ──────────────────────────────────────────────────
+export interface SimulationRequest {
+  event_id:        string
+  home_team:       string
+  away_team:       string
+  home_team_sr_id: string   // SportRadar UUID for stats API
+  away_team_sr_id: string
+  sport:           'ncaab' | 'nba' | 'nfl' | 'ncaaf'
+  spread_home:     number
+  total:           number
+  odds_spread:     number
+  odds_total:      number
+  odds_ml_home:    number
+  odds_ml_away:    number
+  neutral_site:    boolean
+  user_id?:        string
+  is_hot_pick?:    boolean
+  game_time?:      string
 }
 
-export interface PredictionOutput {
-  predictionId: string
-  predictedWinner: string | null
-  confidenceScore: number
-  edgeScore: number
-  recommendedBetType: string
-  recommendedLine: any
-  aiAnalysis: string
-  keyFactors: string[]
-  riskAssessment: string
-  modelVersion: string
+export interface SimulationOutput {
+  recommendation: 'BET' | 'NO BET'
+  edge_tier:      string
+  bet_type:       string
+  bet_side:       string
+  edge_up_score:  number
+  confidence:     number
+  projected_score: { home: number; away: number; home_team: string; away_team: string }
+  market_vs_model: {
+    fair_spread: number; market_spread: number; spread_gap: number
+    fair_total: number;  market_total: number;  total_gap:  number
+  }
+  headline:      string
+  summary:       string
+  key_factors:   string[]
+  risk_factors:  string[]
+  analysis:      string
+  sizing_note:   string
+  model_data:    Record<string, number>
+  // Meta
+  sim_results:    CBBSimResults
+  prediction_id:  string
+  sport:          string
 }
 
-class ClaudeAgent {
-  private model = 'claude-sonnet-4-20250514'
+// ── Main entry point ──────────────────────────────────────────────────────────
+export async function runGameSimulation(req: SimulationRequest): Promise<SimulationOutput> {
 
-  async generatePrediction(input: PredictionInput): Promise<PredictionOutput> {
-    try {
-      // 1. Fetch event data
-      const event = await this.getEventData(input.eventId)
-      
-      // 2. Get active prompt for this sport/bet type
-      const prompt = await this.getActivePrompt(input.sport, input.betType)
-      
-      // 3. Build context with all necessary data
-      const context = this.buildPredictionContext(event, input.sport, input.betType)
-      
-      // 4. Build final prompt
-      const fullPrompt = this.buildPrompt(prompt, context)
-      
-      // 5. Call Claude API
-      const claudeResponse = await this.callClaude(fullPrompt)
-      
-      // 6. Parse response
-      const parsed = this.parseAIResponse(claudeResponse, input.betType)
-      
-      // 7. Calculate edge score
-      const edgeScore = this.calculateEdgeScore(
-        parsed.trueProbability,
-        context.odds
-      )
-      
-      // 8. Validate prediction meets thresholds
-      const validated = this.validatePrediction(parsed, edgeScore)
-      
-      // 9. Store prediction in database
-      const stored = await this.storePrediction({
-        event_id: input.eventId,
-        prediction_type: input.isHotPick ? 'hot_pick' : 'user_simulation',
-        requested_by: input.userId,
-        model_version: this.model,
-        predicted_winner: validated.predictedWinner,
-        confidence_score: validated.confidenceScore,
-        edge_score: edgeScore,
-        recommended_bet_type: input.betType,
-        recommended_line: validated.recommendedLine,
-        ai_analysis: validated.aiAnalysis,
-        key_factors: validated.keyFactors,
-        risk_assessment: validated.riskAssessment,
-        odds_snapshot: context.odds
-      })
-      
-      return {
-        predictionId: stored.id,
-        ...validated,
-        edgeScore,
-        modelVersion: this.model
-      }
-      
-    } catch (error) {
-      console.error('Error generating prediction:', error)
-      throw error
-    }
+  // 1. Fetch team stats from SportRadar
+  const [homeStats, awayStats] = await Promise.all([
+    getTeamStats(req.home_team_sr_id, req.sport as 'ncaab'),
+    getTeamStats(req.away_team_sr_id, req.sport as 'ncaab'),
+  ])
+
+  // 2. Build simulation input
+  const simInput: CBBGameInput = {
+    home: {
+      name:   req.home_team,
+      season: homeStats.season,
+      last10: homeStats.last10,
+    },
+    away: {
+      name:   req.away_team,
+      season: awayStats.season,
+      last10: awayStats.last10,
+    },
+    spread_home:  req.spread_home,
+    total:        req.total,
+    odds_spread:  req.odds_spread  || -110,
+    odds_total:   req.odds_total   || -110,
+    odds_ml_home: req.odds_ml_home || -150,
+    odds_ml_away: req.odds_ml_away || +130,
+    neutral_site: req.neutral_site,
   }
 
-  private async getEventData(eventId: string) {
-    const { data: event, error } = await supabaseAdmin
-      .from('sports_events')
-      .select('*')
-      .eq('id', eventId)
-      .single()
-    
-    if (error || !event) {
-      throw new Error(`Event not found: ${eventId}`)
-    }
-    
-    return event
+  // 3. Run 20,000-iteration Monte Carlo simulation
+  const simResults = runCBBSimulation(simInput, CBB_PARAMS)
+
+  // 4. Classify edge score
+  const edgeClass = classifyEdgeScore(simResults.best_edge_score)
+
+  // 5. Build prompt for Claude
+  const userPrompt = buildCBBPrompt(req, simResults, homeStats, awayStats)
+
+  // 6. Call Claude
+  const message = await anthropic.messages.create({
+    model:      'claude-sonnet-4-20250514',
+    max_tokens: 2000,
+    system:     EDGE_UP_SIM_SYSTEM_PROMPT,
+    messages:   [{ role: 'user', content: userPrompt }],
+  })
+
+  // 7. Parse response
+  const rawText = message.content[0].type === 'text' ? message.content[0].text : '{}'
+  let aiOutput: Omit<SimulationOutput, 'sim_results' | 'prediction_id' | 'sport'>
+
+  try {
+    const cleaned = rawText.replace(/```json\n?|\n?```/g, '').trim()
+    aiOutput = JSON.parse(cleaned)
+  } catch {
+    aiOutput = buildFallback(simResults, req, edgeClass)
   }
 
-  private async getActivePrompt(sport: string, betType: string) {
-    // For now, return a default prompt structure
-    // Later we'll store these in the database
-    return {
-      id: 'default',
-      sport_type: sport,
-      bet_type: betType,
-      system_instructions: `You are an elite sports betting analyst. Only recommend bets with >65% confidence and positive edge (>2% expected value).`,
-      prompt_template: this.getDefaultPromptTemplate(sport, betType)
-    }
+  // 8. Store in Supabase (ai_predictions table — your actual table name)
+  const predictionId = await storePrediction(req, simResults, aiOutput)
+
+  return {
+    ...aiOutput,
+    sim_results:   simResults,
+    prediction_id: predictionId,
+    sport:         req.sport,
   }
+}
 
-  private getDefaultPromptTemplate(sport: string, betType: string): string {
-    return `
-Analyze this ${sport.toUpperCase()} game for ${betType} betting opportunities.
+// ── Prompt builder ────────────────────────────────────────────────────────────
+function buildCBBPrompt(
+  req: SimulationRequest,
+  sim: CBBSimResults,
+  homeStats: any,
+  awayStats: any
+): string {
+  return `
+## GAME: ${req.away_team} @ ${req.home_team}
+Sport: NCAA Men's Basketball (CBB)
+Site: ${req.neutral_site ? 'Neutral Site' : `${req.home_team} (Home)`}
+Game Time: ${req.game_time || 'TBD'}
+Market Spread: ${req.home_team} ${req.spread_home > 0 ? '+' : ''}${req.spread_home} (${req.odds_spread})
+Market Total: ${req.total} (${req.odds_total})
 
-## Game Details
-{game_details}
+## SIMULATION RESULTS (20,000 runs)
+Home Win Probability:    ${(sim.home_win_pct    * 100).toFixed(1)}%
+Home Cover Probability:  ${(sim.home_cover_pct  * 100).toFixed(1)}%
+Away Cover Probability:  ${(sim.away_cover_pct  * 100).toFixed(1)}%
+Over Probability:        ${(sim.over_pct         * 100).toFixed(1)}%
+Under Probability:       ${(sim.under_pct        * 100).toFixed(1)}%
 
-## Current Betting Lines
-{betting_lines}
+## FAIR LINES
+Fair Spread (Home):  ${sim.fair_spread.toFixed(1)} | Market: ${req.spread_home} | GAP: ${sim.spread_vs_market.toFixed(1)} pts
+Fair Total:          ${sim.fair_total.toFixed(1)}  | Market: ${req.total}       | GAP: ${sim.total_vs_market.toFixed(1)} pts
+Fair Moneyline (Home): ${Math.round(sim.fair_moneyline_home)}
 
-## Team Statistics
-{team_stats}
+## EDGE SCORES (% ROI)
+Spread Home Cover: ${sim.edge_spread_home.toFixed(1)}%
+Spread Away Cover: ${sim.edge_spread_away.toFixed(1)}%
+Over:              ${sim.edge_over.toFixed(1)}%
+Under:             ${sim.edge_under.toFixed(1)}%
+→ BEST BET: ${sim.best_bet} | Edge: ${sim.best_edge_score.toFixed(1)}% | Confidence: ${sim.best_confidence_pct.toFixed(1)}%
 
-## Your Task
-Provide your analysis in this EXACT format:
+## PROJECTED SCORE
+${req.home_team}: ${sim.home_mean_pts.toFixed(1)} pts (SD ±${sim.home_sd.toFixed(1)})
+${req.away_team}: ${sim.away_mean_pts.toFixed(1)} pts (SD ±${sim.away_sd.toFixed(1)})
+Expected Possessions: ${sim.expected_possessions.toFixed(1)}
 
-### PREDICTION
-[State: "HOME", "AWAY", or "NO BET"]
+## ${req.home_team.toUpperCase()} WEIGHTED STATS (vs National Avg)
+ORtg:     ${sim.home_weighted.ORtg.toFixed(1)}     [nat avg: 104]
+DRtg:     ${sim.home_weighted.DRtg.toFixed(1)}     [nat avg: 104, lower=better]
+Pace:     ${sim.home_weighted.Pace.toFixed(1)}     [nat avg: 69]
+3PAR:     ${(sim.home_weighted.ThreePAR * 100).toFixed(1)}%  [nat avg: 39%]
+TOV:      ${(sim.home_weighted.TOV      * 100).toFixed(1)}%  [nat avg: 18%]
+FTr:      ${(sim.home_weighted.FTr      * 100).toFixed(1)}%  [nat avg: 30%]
+ORB:      ${(sim.home_weighted.ORB      * 100).toFixed(1)}%  [nat avg: 30%]
+PPP:      ${sim.home_ppp.toFixed(4)}
+StyleAdj: ${sim.home_style_adj.toFixed(3)} pts
 
-### CONFIDENCE LEVEL
-[Score 0-100. Only recommend if >65]
+## ${req.away_team.toUpperCase()} WEIGHTED STATS (vs National Avg)
+ORtg:     ${sim.away_weighted.ORtg.toFixed(1)}     [nat avg: 104]
+DRtg:     ${sim.away_weighted.DRtg.toFixed(1)}     [nat avg: 104]
+Pace:     ${sim.away_weighted.Pace.toFixed(1)}     [nat avg: 69]
+3PAR:     ${(sim.away_weighted.ThreePAR * 100).toFixed(1)}%  [nat avg: 39%]
+TOV:      ${(sim.away_weighted.TOV      * 100).toFixed(1)}%  [nat avg: 18%]
+FTr:      ${(sim.away_weighted.FTr      * 100).toFixed(1)}%  [nat avg: 30%]
+ORB:      ${(sim.away_weighted.ORB      * 100).toFixed(1)}%  [nat avg: 30%]
+PPP:      ${sim.away_ppp.toFixed(4)}
+StyleAdj: ${sim.away_style_adj.toFixed(3)} pts
 
-### TRUE PROBABILITY ESTIMATE
-[Your calculated probability: XX.X%]
+## RAW SEASON STATS (for reference)
+${req.home_team}: ${homeStats.games_played} games, ${homeStats.raw_season?.ppg?.toFixed(1)} PPG, ${homeStats.raw_season?.opp_ppg?.toFixed(1)} OPP PPG
+${req.away_team}: ${awayStats.games_played} games, ${awayStats.raw_season?.ppg?.toFixed(1)} PPG, ${awayStats.raw_season?.opp_ppg?.toFixed(1)} OPP PPG
 
-### RECOMMENDED BET
-[Format: "Team Name {betType} at {odds}" or "NO BET"]
+${sim.best_edge_score < RECOMMENDATION_THRESHOLD.MIN_EDGE_SCORE
+  ? `⚠️ NOTE: Best edge score is ${sim.best_edge_score.toFixed(1)}% — BELOW the 20% threshold. Return recommendation: "NO BET".`
+  : `✅ Best bet qualifies for recommendation (${sim.best_edge_score.toFixed(1)}% ≥ 20% threshold).`
+}
+`
+}
 
-### KEY FACTORS
-[List 3-5 specific factors with evidence]
-
-### DETAILED ANALYSIS
-[2-3 paragraphs explaining your reasoning]
-
-### RISK ASSESSMENT
-[One sentence stating the primary risk]
-
-IMPORTANT: If confidence is <65% or edge is <2%, recommend "NO BET"
-    `.trim()
+// ── Fallback if Claude JSON parse fails ───────────────────────────────────────
+function buildFallback(sim: CBBSimResults, req: SimulationRequest, edgeClass: any) {
+  const rec = sim.best_edge_score >= RECOMMENDATION_THRESHOLD.MIN_EDGE_SCORE ? 'BET' : 'NO BET'
+  return {
+    recommendation: rec as 'BET' | 'NO BET',
+    edge_tier:      edgeClass.tier,
+    bet_type:       sim.best_bet.includes('spread') ? 'Spread'
+                  : sim.best_bet === 'over' || sim.best_bet === 'under' ? 'Total'
+                  : 'Moneyline',
+    bet_side:        sim.best_bet,
+    edge_up_score:   Math.round(sim.best_edge_score * 10) / 10,
+    confidence:      Math.round(sim.best_confidence_pct * 10) / 10,
+    projected_score: {
+      home:       Math.round(sim.home_mean_pts * 10) / 10,
+      away:       Math.round(sim.away_mean_pts * 10) / 10,
+      home_team:  req.home_team,
+      away_team:  req.away_team,
+    },
+    market_vs_model: {
+      fair_spread:   Math.round(sim.fair_spread * 10) / 10,
+      market_spread: req.spread_home,
+      spread_gap:    Math.round(sim.spread_vs_market * 10) / 10,
+      fair_total:    Math.round(sim.fair_total * 10) / 10,
+      market_total:  req.total,
+      total_gap:     Math.round(sim.total_vs_market * 10) / 10,
+    },
+    headline:    `${req.home_team} vs ${req.away_team} — Edge: ${sim.best_edge_score.toFixed(1)}%`,
+    summary:     `Model projects ${req.home_team} ${sim.home_mean_pts.toFixed(0)}-${req.away_team} ${sim.away_mean_pts.toFixed(0)}. Fair spread: ${sim.fair_spread.toFixed(1)}, market: ${req.spread_home}.`,
+    key_factors: [
+      `${req.home_team} ORtg ${sim.home_weighted.ORtg.toFixed(1)} vs ${req.away_team} DRtg ${sim.away_weighted.DRtg.toFixed(1)}`,
+      `Expected possessions: ${sim.expected_possessions.toFixed(1)} (fair total: ${sim.fair_total.toFixed(1)})`,
+      `${sim.spread_vs_market > 0 ? req.home_team : req.away_team} undervalued by ${Math.abs(sim.spread_vs_market).toFixed(1)} pts vs market`,
+    ],
+    risk_factors: [
+      'Fallback response — Claude JSON parse error. Verify results manually.',
+      'Use model_data tab for raw simulation outputs.',
+    ],
+    analysis:     `20,000-iteration simulation. Home cover: ${(sim.home_cover_pct * 100).toFixed(1)}%. Over: ${(sim.over_pct * 100).toFixed(1)}%.`,
+    sizing_note:  edgeClass.tier === 'EXCEPTIONAL' ? 'Full unit.'
+                : edgeClass.tier === 'STRONG'      ? 'Standard unit.'
+                : 'Half unit or skip.',
+    model_data: {
+      home_win_pct:   sim.home_win_pct,
+      home_cover_pct: sim.home_cover_pct,
+      over_pct:       sim.over_pct,
+      fair_spread:    sim.fair_spread,
+      fair_total:     sim.fair_total,
+      ev_best_bet:    sim.best_edge_score / 100,
+    },
   }
+}
 
-  private buildPredictionContext(event: any, sport: string, betType: string) {
-    const odds = JSON.parse(event.odds_data)
-    
-    return {
-      event,
-      odds,
-      game_details: `
-Home Team: ${event.home_team}
-Away Team: ${event.away_team}
-Game Time: ${event.commence_time}
-Sport: ${sport}
-      `.trim(),
-      betting_lines: JSON.stringify(odds, null, 2),
-      team_stats: 'Team statistics would be fetched here'
-    }
-  }
+// ── Store in Supabase ─────────────────────────────────────────────────────────
+// FIX: table name is ai_predictions (NOT predictions — that table doesn't exist)
+async function storePrediction(
+  req: SimulationRequest,
+  sim: CBBSimResults,
+  output: any
+): Promise<string> {
+  const edgeClass = classifyEdgeScore(output.edge_up_score || 0)
 
-  private buildPrompt(prompt: any, context: any): string {
-    let fullPrompt = prompt.system_instructions + '\n\n'
-    fullPrompt += prompt.prompt_template
-    
-    // Replace variables
-    for (const [key, value] of Object.entries(context)) {
-      const placeholder = `{${key}}`
-      fullPrompt = fullPrompt.replace(new RegExp(placeholder, 'g'), String(value))
-    }
-    
-    return fullPrompt
-  }
+  const { data } = await supabaseAdmin
+    .from('ai_predictions')    // ← FIX: your actual table name
+    .insert({
+      // Standard ai_predictions columns
+      prediction_type:      req.is_hot_pick ? 'hot_pick' : 'user_simulation',
+      requested_by:         req.user_id || null,
+      confidence_score:     output.confidence,
+      edge_score:           output.edge_up_score,
+      ai_analysis:          output.analysis,
+      key_factors:          output.key_factors,
+      risk_assessment:      output.risk_factors?.join(' | ') || '',
+      recommended_bet_type: output.bet_type?.toLowerCase().replace('/', '_') || 'spread',
+      recommended_line:     output.market_vs_model || {},
+      odds_snapshot:        { spread: req.spread_home, total: req.total, ml_home: req.odds_ml_home, ml_away: req.odds_ml_away },
 
-  private async callClaude(prompt: string): Promise<string> {
-    const message = await anthropic.messages.create({
-      model: this.model,
-      max_tokens: 2500,
-      temperature: 0.3,
-      messages: [
-        {
-          role: 'user',
-          content: prompt
-        }
-      ]
+      // Extended simulation columns (added by migration)
+      sport:                req.sport,
+      home_team:            req.home_team,
+      away_team:            req.away_team,
+      game_time:            req.game_time || null,
+      edge_tier:            edgeClass.tier,
+      projected_home_score: output.projected_score?.home,
+      projected_away_score: output.projected_score?.away,
+      fair_spread:          sim.fair_spread,
+      fair_total:           sim.fair_total,
+      market_spread:        req.spread_home,
+      market_total:         req.total,
+      sim_home_win_pct:     sim.home_win_pct,
+      sim_home_cover_pct:   sim.home_cover_pct,
+      sim_over_pct:         sim.over_pct,
+      full_response:        output,
     })
-    
-    const responseText = message.content
-      .filter(block => block.type === 'text')
-      .map(block => (block as any).text)
-      .join('\n')
-    
-    return responseText
-  }
+    .select('id')
+    .single()
 
-  private parseAIResponse(response: string, betType: string): any {
-    // Extract sections using regex (using [\s\S] instead of /s flag for ES2015+ compatibility)
-    const predictionMatch = response.match(/### PREDICTION\s*([\s\S]*?)(?=###|$)/)
-    const confidenceMatch = response.match(/### CONFIDENCE LEVEL\s*([\s\S]*?)(?=###|$)/)
-    const probabilityMatch = response.match(/### TRUE PROBABILITY ESTIMATE\s*([\s\S]*?)(?=###|$)/)
-    const betMatch = response.match(/### RECOMMENDED BET\s*([\s\S]*?)(?=###|$)/)
-    const factorsMatch = response.match(/### KEY FACTORS\s*([\s\S]*?)(?=###|$)/)
-    const analysisMatch = response.match(/### DETAILED ANALYSIS\s*([\s\S]*?)(?=###|$)/)
-    const riskMatch = response.match(/### RISK ASSESSMENT\s*([\s\S]*?)(?=###|$)/)
-
-    const prediction = predictionMatch ? predictionMatch[1].trim() : ''
-    const confidenceText = confidenceMatch ? confidenceMatch[1].trim() : '0'
-    const probabilityText = probabilityMatch ? probabilityMatch[1].trim() : '0'
-    
-    // Extract numeric values
-    const confidenceScore = parseInt(confidenceText.match(/\d+/)?.[0] || '0')
-    const trueProbability = parseFloat(probabilityText.match(/\d+\.?\d*/)?.[0] || '0')
-    
-    // Parse factors
-    const factorsText = factorsMatch ? factorsMatch[1].trim() : ''
-    const keyFactors = factorsText
-      .split('\n')
-      .filter(line => line.trim().startsWith('-'))
-      .map(line => line.replace(/^-\s*/, '').trim())
-      .filter(Boolean)
-
-    return {
-      predictedWinner: prediction.includes('NO BET') ? null : (prediction.includes('HOME') ? 'home' : 'away'),
-      confidenceScore,
-      trueProbability,
-      recommendedLine: betMatch ? betMatch[1].trim() : 'NO BET',
-      keyFactors,
-      aiAnalysis: analysisMatch ? analysisMatch[1].trim() : '',
-      riskAssessment: riskMatch ? riskMatch[1].trim() : ''
-    }
-  }
-
-  private calculateEdgeScore(trueProbability: number, odds: any): number {
-    // Simplified edge calculation
-    // In production, use actual odds from the event
-    const impliedProb = 50 // Placeholder
-    const edge = trueProbability - impliedProb
-    return edge
-  }
-
-  private validatePrediction(parsed: any, edgeScore: number) {
-    let recommended = true
-    
-    if (parsed.confidenceScore < 65) {
-      recommended = false
-      parsed.predictedWinner = null
-      parsed.recommendedLine = 'NO BET - Confidence below 65% threshold'
-    }
-    
-    if (edgeScore < 2.0) {
-      recommended = false
-      parsed.predictedWinner = null
-      parsed.recommendedLine = 'NO BET - Edge below 2% threshold'
-    }
-    
-    return {
-      ...parsed,
-      recommended
-    }
-  }
-
-  private async storePrediction(data: any) {
-    const { data: stored, error } = await supabaseAdmin
-      .from('ai_predictions')
-      .insert(data)
-      .select()
-      .single()
-    
-    if (error) throw error
-    
-    return stored
-  }
+  return data?.id || ''
 }
-
-// Export singleton
-export const claudeAgent = new ClaudeAgent()

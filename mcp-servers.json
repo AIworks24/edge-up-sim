@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "sportradar": {
+      "command": "npx",
+      "args": ["-y", "@sportradar/mcp-server"],
+      "env": {
+        "SPORTRADAR_API_KEY": "your-sportradar-api-key",
+        "SPORTRADAR_ACCESS_LEVEL": "trial"
+      }
+    }
+  }
+}
