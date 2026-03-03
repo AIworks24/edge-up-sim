@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
   // 2. Fallback: fetch live from SportRadar if cache is empty
   try {
     let games = await getUpcomingGames(sport, 3)
-    games     = await attachOddsToGames(games)
+    games     = await attachOddsToGames(games, sport)
     return NextResponse.json({ events: games, source: 'live' })
   } catch (err: any) {
     console.error('[EVENTS] Error:', err)

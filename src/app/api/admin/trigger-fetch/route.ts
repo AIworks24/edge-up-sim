@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
   for (const sport of sports) {
     try {
       let games = await getUpcomingGames(sport, 3)
-      games     = await attachOddsToGames(games)
+      games     = await attachOddsToGames(games, sport)
 
       if (games.length === 0) {
         results[sport] = { fetched: 0, stored: 0 }
