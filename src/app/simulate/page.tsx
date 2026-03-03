@@ -22,29 +22,28 @@ interface Game {
   home_team: string
   away_team: string
   sport_title: string
-  sport_key: string
+  sport_key: string      // stored as 'ncaab', 'nfl', 'nba' (SportRadar keys)
   commence_time: string
-  odds_data: any
+  odds_data: any         // stored as { spread_home, total, moneyline_home, ... }
+  home_team_sr_id?: string
+  away_team_sr_id?: string
+  external_event_id?: string
 }
 
-// Map UI sport keys to database sport keys
+// ─── FIXED: sport keys now match what trigger-fetch stores (SportRadar format) ───
+// trigger-fetch stores sport_key as: 'ncaab', 'nfl', 'nba'
+// (NOT the old Odds API keys like 'basketball_ncaab')
 const SPORT_KEY_MAP: Record<string, string> = {
-  'nfl': 'americanfootball_nfl',
-  'nba': 'basketball_nba',
-  'ncaaf': 'americanfootball_ncaa',
-  'ncaab': 'basketball_ncaab',
-  'mlb': 'baseball_mlb',
-  'nhl': 'icehockey_nhl'
+  'nfl':   'nfl',
+  'nba':   'nba',
+  'ncaab': 'ncaab',
 }
 
-// Reverse map for API calls
+// Reverse map for API calls (sport_key in DB → UI sport key for simulation API)
 const DB_TO_UI_SPORT_MAP: Record<string, string> = {
-  'americanfootball_nfl': 'nfl',
-  'basketball_nba': 'nba',
-  'americanfootball_ncaa': 'ncaaf',
-  'basketball_ncaab': 'ncaab',
-  'baseball_mlb': 'mlb',
-  'icehockey_nhl': 'nhl'
+  'ncaab': 'ncaab',
+  'nba':   'nba',
+  'nfl':   'nfl',
 }
 
 export default function SimulatePage() {
@@ -60,51 +59,35 @@ export default function SimulatePage() {
   const [simulating, setSimulating] = useState(false)
   const [prediction, setPrediction] = useState<any>(null)
   const [error, setError] = useState('')
+  const [debugInfo, setDebugInfo] = useState<string>('')
 
+  // ─── Only show sports that are actually active (Phase 1 = CBB only) ──────────
   const sports = [
-    { key: 'nfl', name: 'NFL', icon: '🏈', description: 'National Football League' },
-    { key: 'nba', name: 'NBA', icon: '🏀', description: 'National Basketball Association' },
-    { key: 'ncaaf', name: 'NCAA Football', icon: '🏈', description: 'College Football' },
     { key: 'ncaab', name: 'NCAA Basketball', icon: '🏀', description: 'College Basketball' },
-    { key: 'mlb', name: 'MLB', icon: '⚾', description: 'Major League Baseball' },
-    { key: 'nhl', name: 'NHL', icon: '🏒', description: 'National Hockey League' }
+    { key: 'nfl',   name: 'NFL',             icon: '🏈', description: 'National Football League' },
+    { key: 'nba',   name: 'NBA',             icon: '🏀', description: 'National Basketball Association' },
   ]
 
   const betTypes = [
-    { key: 'moneyline', name: 'Moneyline', description: 'Pick the winner' },
-    { key: 'spread', name: 'Point Spread', description: 'Win by margin' },
-    { key: 'total', name: 'Over/Under', description: 'Total points scored' }
+    { key: 'moneyline', name: 'Moneyline',   description: 'Pick the winner' },
+    { key: 'spread',    name: 'Point Spread', description: 'Win by margin' },
+    { key: 'total',     name: 'Over/Under',   description: 'Total points scored' }
   ]
 
-  useEffect(() => {
-    checkAuth()
-  }, [])
-
-  useEffect(() => {
-    if (selectedSport) {
-      loadGames()
-    }
-  }, [selectedSport])
+  useEffect(() => { checkAuth() }, [])
+  useEffect(() => { if (selectedSport) loadGames() }, [selectedSport])
 
   const checkAuth = async () => {
     try {
       const { data: { user: authUser } } = await supabase.auth.getUser()
-      if (!authUser) {
-        router.push('/login')
-        return
-      }
+      if (!authUser) { router.push('/login'); return }
       setUser(authUser)
-
       const { data: profileData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', authUser.id)
-        .single()
-
+        .from('profiles').select('*').eq('id', authUser.id).single()
       setProfile(profileData)
       setLoading(false)
-    } catch (error) {
-      console.error('Auth error:', error)
+    } catch (err) {
+      console.error('Auth error:', err)
       router.push('/login')
     }
   }
@@ -112,14 +95,17 @@ export default function SimulatePage() {
   const loadGames = async () => {
     setLoadingGames(true)
     setError('')
+    setDebugInfo('')
     setAvailableGames([])
-    
+
     try {
+      // FIXED: Use the correct sport key (SportRadar format, not Odds API format)
       const dbSportKey = SPORT_KEY_MAP[selectedSport]
-      
       if (!dbSportKey) {
-        throw new Error(`Invalid sport key: ${selectedSport}`)
+        throw new Error(`Unknown sport: ${selectedSport}`)
       }
+
+      console.log(`[loadGames] Querying sport_key='${dbSportKey}' in sports_events table`)
 
       const { data: games, error: gamesError } = await supabase
         .from('sports_events')
@@ -131,84 +117,79 @@ export default function SimulatePage() {
         .limit(20)
 
       if (gamesError) {
-        console.error('Database error:', gamesError)
+        console.error('[loadGames] Database error:', gamesError)
         throw gamesError
       }
 
+      console.log(`[loadGames] Found ${games?.length ?? 0} games for ${dbSportKey}`)
+
       if (!games || games.length === 0) {
-        setError(`No upcoming ${selectedSport.toUpperCase()} games found.`)
+        // Helpful message pointing to the manual trigger
+        setError(
+          `No upcoming ${selectedSport.toUpperCase()} games in database. ` +
+          `Run /api/admin/trigger-fetch to populate games from SportRadar.`
+        )
+        setDebugInfo(`Queried: sport_key='${dbSportKey}', event_status='upcoming', commence_time >= now`)
         setAvailableGames([])
       } else {
         setAvailableGames(games)
         setError('')
       }
-    } catch (error: any) {
-      console.error('Error loading games:', error)
-      setError(`Failed to load games: ${error.message}`)
-      setAvailableGames([])
+    } catch (err: any) {
+      console.error('[loadGames] Error:', err)
+      setError(`Failed to load games: ${err.message}`)
     } finally {
       setLoadingGames(false)
     }
   }
 
-  // Extract betting odds from odds_data - FIXED to handle JSON string
+  // ─── FIXED: Parse SportRadar flat odds format (not Odds API bookmaker array) ──
+  // trigger-fetch stores odds_data as:
+  //   { spread_home, spread_home_odds, total, total_over_odds, moneyline_home, moneyline_away, ... }
   const getGameOdds = (game: Game) => {
     try {
-      // Handle if odds_data is null or undefined
       if (!game.odds_data) {
-        return { moneyline: null, spread: null, total: null, bookmaker: null }
+        return { spread: null, total: null, moneyline: null }
       }
 
-      // Parse if it's a string, otherwise use as-is
-      let bookmakers = game.odds_data
-      if (typeof game.odds_data === 'string') {
-        bookmakers = JSON.parse(game.odds_data)
+      // odds_data may be a JSON string (Supabase sometimes returns JSONB as string)
+      let o = game.odds_data
+      if (typeof o === 'string') {
+        o = JSON.parse(o)
       }
 
-      // Ensure it's an array
-      if (!Array.isArray(bookmakers) || bookmakers.length === 0) {
-        return { moneyline: null, spread: null, total: null, bookmaker: null }
+      const formatAmerican = (n: number | null | undefined): string | null => {
+        if (n == null) return null
+        return n > 0 ? `+${n}` : `${n}`
       }
 
-      const firstBookmaker = bookmakers[0]
-      const result: any = { 
-        moneyline: null, 
-        spread: null, 
-        total: null,
-        bookmaker: firstBookmaker.title || firstBookmaker.key || 'Unknown'
+      return {
+        spread: o.spread_home != null ? {
+          home: `${o.spread_home > 0 ? '+' : ''}${o.spread_home} (${formatAmerican(o.spread_home_odds)})`,
+          away: `${o.spread_home > 0 ? '-' : '+'}${Math.abs(o.spread_home)} (${formatAmerican(o.spread_away_odds)})`,
+        } : null,
+        total: o.total != null ? {
+          over:  `O${o.total} (${formatAmerican(o.total_over_odds)})`,
+          under: `U${o.total} (${formatAmerican(o.total_under_odds)})`,
+        } : null,
+        moneyline: (o.moneyline_home != null || o.moneyline_away != null) ? {
+          home: formatAmerican(o.moneyline_home),
+          away: formatAmerican(o.moneyline_away),
+        } : null,
+        raw: o,
       }
-
-      if (firstBookmaker && firstBookmaker.markets) {
-        firstBookmaker.markets.forEach((market: any) => {
-          if (market.key === 'h2h') {
-            result.moneyline = market.outcomes
-          } else if (market.key === 'spreads') {
-            result.spread = market.outcomes
-          } else if (market.key === 'totals') {
-            result.total = market.outcomes
-          }
-        })
-      }
-
-      return result
-    } catch (error) {
-      console.error('Error parsing odds:', error)
-      return { moneyline: null, spread: null, total: null, bookmaker: null }
+    } catch (err) {
+      console.error('[getGameOdds] Parse error:', err, game.odds_data)
+      return { spread: null, total: null, moneyline: null }
     }
-  }
-
-  // Format American odds
-  const formatOdds = (odds: number) => {
-    if (odds > 0) return `+${odds}`
-    return odds.toString()
   }
 
   const runSimulation = async () => {
     if (!selectedGame || !selectedBetType) return
 
-    const dailyLimit = profile?.daily_simulation_limit || 3
-    const currentCount = profile?.daily_simulation_count || 0
-    const rollover = profile?.monthly_simulation_rollover || 0
+    const dailyLimit  = profile?.daily_simulation_limit  || 3
+    const currentCount = profile?.daily_simulation_count  || 0
+    const rollover    = profile?.monthly_simulation_rollover || 0
 
     if (currentCount >= dailyLimit + rollover) {
       setError(`You've reached your daily simulation limit (${dailyLimit} + ${rollover} rollover).`)
@@ -220,43 +201,41 @@ export default function SimulatePage() {
     setPrediction(null)
 
     try {
-      const uiSportKey = DB_TO_UI_SPORT_MAP[selectedGame.sport_key]
-      
+      const uiSportKey = DB_TO_UI_SPORT_MAP[selectedGame.sport_key] || selectedGame.sport_key
+      const odds = getGameOdds(selectedGame)
+
       const response = await fetch('/api/predictions/generate', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          eventId: selectedGame.id,
-          sport: uiSportKey,
-          betType: selectedBetType,
-          userId: user.id
+          eventId:        selectedGame.external_event_id || selectedGame.id,
+          sport:          uiSportKey,
+          betType:        selectedBetType,
+          userId:         user.id,
+          home_team:      selectedGame.home_team,
+          away_team:      selectedGame.away_team,
+          home_team_sr_id: selectedGame.home_team_sr_id,
+          away_team_sr_id: selectedGame.away_team_sr_id,
+          spread_home:    odds.raw?.spread_home     ?? null,
+          total:          odds.raw?.total           ?? null,
+          moneyline_home: odds.raw?.moneyline_home  ?? null,
+          moneyline_away: odds.raw?.moneyline_away  ?? null,
         })
       })
 
       const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to generate prediction')
-      }
+      if (!response.ok) throw new Error(result.error || 'Failed to generate prediction')
 
       setPrediction(result.prediction || result)
 
-      // Refresh profile
+      // Refresh profile for updated sim count
       const { data: updatedProfile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single()
+        .from('profiles').select('*').eq('id', user.id).single()
+      if (updatedProfile) setProfile(updatedProfile)
 
-      if (updatedProfile) {
-        setProfile(updatedProfile)
-      }
-
-    } catch (error: any) {
-      console.error('Simulation error:', error)
-      setError(error.message || 'Failed to run simulation.')
+    } catch (err: any) {
+      console.error('[runSimulation] Error:', err)
+      setError(err.message || 'Failed to run simulation.')
     } finally {
       setSimulating(false)
     }
@@ -269,6 +248,7 @@ export default function SimulatePage() {
     setPrediction(null)
     setError('')
     setAvailableGames([])
+    setDebugInfo('')
   }
 
   if (loading) {
@@ -302,76 +282,63 @@ export default function SimulatePage() {
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="mb-12 text-center">
-          <h1 className="text-5xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent mb-4">
-            Custom Simulation
-          </h1>
-          <p className="text-xl text-gray-300">
-            AI-powered betting analysis for any game
-          </p>
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold text-white mb-2">Run Simulation</h1>
+          <p className="text-gray-400">Select a sport, game, and bet type to get an AI-powered edge analysis.</p>
         </div>
-
-        {/* Error Message */}
-        {error && (
-          <div className="mb-8 p-6 bg-red-500/10 border border-red-500/50 rounded-xl">
-            <div className="flex items-start space-x-3">
-              <AlertCircle className="w-6 h-6 text-red-400 flex-shrink-0 mt-0.5" />
-              <div className="text-red-200 whitespace-pre-line">{error}</div>
-            </div>
-          </div>
-        )}
 
         {/* Prediction Result */}
         {prediction && (
-          <div className="bg-gradient-to-br from-green-900/50 to-blue-900/50 backdrop-blur-xl border border-green-500/30 rounded-2xl p-8 mb-8">
+          <div className="bg-slate-800/50 backdrop-blur-xl border border-green-500/30 rounded-2xl p-8 mb-8">
             <div className="flex items-center space-x-3 mb-6">
               <CheckCircle2 className="w-8 h-8 text-green-400" />
-              <h2 className="text-3xl font-bold text-white">Simulation Complete</h2>
+              <h2 className="text-2xl font-bold text-white">Simulation Complete</h2>
             </div>
 
-            <div className="space-y-6">
-              <div>
-                <div className="text-sm font-semibold text-gray-400 mb-2">Recommended Bet</div>
-                <div className="text-2xl font-bold text-white">{prediction.predicted_winner || prediction.predictedWinner}</div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-6">
-                <div>
-                  <div className="text-sm font-semibold text-gray-400 mb-2">Confidence</div>
-                  <div className="text-3xl font-bold text-blue-400">{prediction.confidence_score || prediction.confidenceScore}%</div>
-                </div>
-                <div>
-                  <div className="text-sm font-semibold text-gray-400 mb-2">Edge Score</div>
-                  <div className="text-3xl font-bold text-green-400">{prediction.edge_score || prediction.edgeScore}%</div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <div className="bg-white/5 rounded-xl p-4 text-center">
+                <div className="text-sm text-gray-400 mb-1">Edge Score</div>
+                <div className={`text-2xl font-bold ${
+                  (prediction.edge_score || 0) >= 20 ? 'text-green-400' :
+                  (prediction.edge_score || 0) >= 12 ? 'text-yellow-400' : 'text-red-400'
+                }`}>
+                  {prediction.edge_score ?? prediction.edgeScore ?? 0}%
                 </div>
               </div>
-
-              <div>
-                <div className="text-sm font-semibold text-gray-400 mb-2">AI Analysis</div>
-                <div className="text-gray-200 leading-relaxed">{prediction.ai_analysis || prediction.aiAnalysis}</div>
-              </div>
-
-              {(prediction.key_factors || prediction.keyFactors) && (
-                <div>
-                  <div className="text-sm font-semibold text-gray-400 mb-2">Key Factors</div>
-                  <ul className="space-y-2">
-                    {(prediction.key_factors || prediction.keyFactors).map((factor: string, index: number) => (
-                      <li key={index} className="flex items-start space-x-2">
-                        <Target className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
-                        <span className="text-gray-300">{factor}</span>
-                      </li>
-                    ))}
-                  </ul>
+              <div className="bg-white/5 rounded-xl p-4 text-center">
+                <div className="text-sm text-gray-400 mb-1">Confidence</div>
+                <div className="text-2xl font-bold text-blue-400">
+                  {prediction.confidence_tier || prediction.confidenceTier || 'N/A'}
                 </div>
-              )}
+              </div>
+              <div className="bg-white/5 rounded-xl p-4 text-center">
+                <div className="text-sm text-gray-400 mb-1">Recommendation</div>
+                <div className="text-lg font-bold text-white">
+                  {prediction.recommended_bet || prediction.recommendedBet || '—'}
+                </div>
+              </div>
+              <div className="bg-white/5 rounded-xl p-4 text-center">
+                <div className="text-sm text-gray-400 mb-1">Bet Type</div>
+                <div className="text-lg font-bold text-white capitalize">{selectedBetType}</div>
+              </div>
+            </div>
 
-              <div>
+            {(prediction.analysis || prediction.reasoning) && (
+              <div className="bg-white/5 rounded-xl p-4 mb-4">
+                <div className="text-sm font-semibold text-gray-400 mb-2">Analysis</div>
+                <div className="text-gray-300 leading-relaxed">
+                  {prediction.analysis || prediction.reasoning}
+                </div>
+              </div>
+            )}
+
+            {(prediction.risk_assessment || prediction.riskAssessment) && (
+              <div className="bg-white/5 rounded-xl p-4">
                 <div className="text-sm font-semibold text-gray-400 mb-2">Risk Assessment</div>
                 <div className="text-orange-300">{prediction.risk_assessment || prediction.riskAssessment}</div>
               </div>
-            </div>
+            )}
 
             <button
               onClick={resetForm}
@@ -392,7 +359,7 @@ export default function SimulatePage() {
                 <h2 className="text-2xl font-bold text-white">Select Sport</h2>
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {sports.map((sport) => (
                   <button
                     key={sport.key}
@@ -429,6 +396,18 @@ export default function SimulatePage() {
                     <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
                     <span className="ml-3 text-gray-400">Loading games...</span>
                   </div>
+                ) : error ? (
+                  <div className="text-center py-8">
+                    <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-3" />
+                    <p className="text-yellow-300 mb-2">{error}</p>
+                    {debugInfo && <p className="text-gray-500 text-xs">{debugInfo}</p>}
+                    <button
+                      onClick={loadGames}
+                      className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm transition"
+                    >
+                      Retry
+                    </button>
+                  </div>
                 ) : availableGames.length === 0 ? (
                   <div className="text-center py-12">
                     <Calendar className="w-16 h-16 text-gray-500 mx-auto mb-4" />
@@ -439,14 +418,11 @@ export default function SimulatePage() {
                     {availableGames.map((game) => {
                       const odds = getGameOdds(game)
                       const hasOdds = odds.moneyline || odds.spread || odds.total
-                      
+
                       return (
                         <button
                           key={game.id}
-                          onClick={() => {
-                            setSelectedGame(game)
-                            setSelectedBetType('')
-                          }}
+                          onClick={() => { setSelectedGame(game); setSelectedBetType('') }}
                           className={`w-full p-6 rounded-xl border-2 transition text-left ${
                             selectedGame?.id === game.id
                               ? 'border-blue-500 bg-blue-500/10'
@@ -454,70 +430,51 @@ export default function SimulatePage() {
                           }`}
                         >
                           <div className="space-y-4">
-                            {/* Game Header */}
                             <div className="flex items-center justify-between">
                               <div className="flex-1">
-                                <div className="text-sm text-gray-400 mb-1">{game.sport_title}</div>
-                                <div className="text-white font-bold text-lg">{game.away_team} @ {game.home_team}</div>
+                                <div className="text-sm text-gray-400 mb-1">
+                                  {game.sport_title || game.sport_key?.toUpperCase()}
+                                </div>
+                                <div className="text-white font-bold text-lg">
+                                  {game.away_team} @ {game.home_team}
+                                </div>
                                 <div className="text-gray-400 text-sm mt-1">
                                   {new Date(game.commence_time).toLocaleString()}
                                 </div>
                               </div>
-                              <ChevronDown className={`w-5 h-5 text-gray-400 transition flex-shrink-0 ml-4 ${selectedGame?.id === game.id ? 'rotate-180' : ''}`} />
+                              <ChevronDown className={`w-5 h-5 text-gray-400 transition flex-shrink-0 ml-4 ${
+                                selectedGame?.id === game.id ? 'rotate-180' : ''
+                              }`} />
                             </div>
 
-                            {/* Betting Odds */}
+                            {/* Odds display — SportRadar flat format */}
                             {hasOdds ? (
-                              <div className="grid grid-cols-3 gap-4 pt-4 border-t border-white/10">
-                                {/* Moneyline */}
+                              <div className="grid grid-cols-3 gap-3 pt-3 border-t border-white/10">
                                 {odds.moneyline && (
                                   <div>
-                                    <div className="text-xs text-gray-500 mb-2 flex items-center">
-                                      <DollarSign className="w-3 h-3 mr-1" />
-                                      Moneyline
-                                    </div>
-                                    {odds.moneyline.map((outcome: any, idx: number) => (
-                                      <div key={idx} className="text-sm">
-                                        <span className="text-gray-400">{outcome.name.split(' ')[0]}: </span>
-                                        <span className="text-white font-semibold">{formatOdds(outcome.price)}</span>
-                                      </div>
-                                    ))}
+                                    <div className="text-xs text-gray-500 mb-1">Moneyline</div>
+                                    <div className="text-sm text-gray-300">{game.home_team.split(' ').pop()}: <span className="text-white font-semibold">{odds.moneyline.home}</span></div>
+                                    <div className="text-sm text-gray-300">{game.away_team.split(' ').pop()}: <span className="text-white font-semibold">{odds.moneyline.away}</span></div>
                                   </div>
                                 )}
-
-                                {/* Spread */}
                                 {odds.spread && (
                                   <div>
-                                    <div className="text-xs text-gray-500 mb-2">Spread</div>
-                                    {odds.spread.map((outcome: any, idx: number) => (
-                                      <div key={idx} className="text-sm">
-                                        <span className="text-gray-400">{outcome.name.split(' ')[0]}: </span>
-                                        <span className="text-white font-semibold">
-                                          {outcome.point > 0 ? '+' : ''}{outcome.point} ({formatOdds(outcome.price)})
-                                        </span>
-                                      </div>
-                                    ))}
+                                    <div className="text-xs text-gray-500 mb-1">Spread</div>
+                                    <div className="text-sm text-white font-semibold">{odds.spread.home}</div>
+                                    <div className="text-sm text-white font-semibold">{odds.spread.away}</div>
                                   </div>
                                 )}
-
-                                {/* Total */}
                                 {odds.total && (
                                   <div>
-                                    <div className="text-xs text-gray-500 mb-2">Total</div>
-                                    {odds.total.map((outcome: any, idx: number) => (
-                                      <div key={idx} className="text-sm">
-                                        <span className="text-gray-400">{outcome.name}: </span>
-                                        <span className="text-white font-semibold">
-                                          {outcome.point} ({formatOdds(outcome.price)})
-                                        </span>
-                                      </div>
-                                    ))}
+                                    <div className="text-xs text-gray-500 mb-1">Total</div>
+                                    <div className="text-sm text-white font-semibold">{odds.total.over}</div>
+                                    <div className="text-sm text-white font-semibold">{odds.total.under}</div>
                                   </div>
                                 )}
                               </div>
                             ) : (
-                              <div className="text-sm text-gray-500 pt-4 border-t border-white/10">
-                                Odds not available yet
+                              <div className="text-sm text-gray-500 pt-3 border-t border-white/10">
+                                Odds not yet available
                               </div>
                             )}
                           </div>
@@ -556,25 +513,33 @@ export default function SimulatePage() {
               </div>
             )}
 
-            {/* Step 4: Run Simulation */}
-            {selectedBetType && (
+            {/* Run Button */}
+            {selectedGame && selectedBetType && (
               <button
                 onClick={runSimulation}
                 disabled={simulating}
-                className="w-full py-6 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white rounded-2xl font-bold text-xl transition shadow-2xl shadow-blue-500/50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-3"
+                className="w-full py-5 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 disabled:opacity-50 text-white rounded-2xl font-bold text-xl transition shadow-xl shadow-blue-500/30"
               >
                 {simulating ? (
-                  <>
+                  <span className="flex items-center justify-center space-x-3">
                     <Loader2 className="w-6 h-6 animate-spin" />
                     <span>Running Simulation...</span>
-                  </>
+                  </span>
                 ) : (
-                  <>
+                  <span className="flex items-center justify-center space-x-3">
                     <Zap className="w-6 h-6" />
-                    <span>Run AI Simulation</span>
-                  </>
+                    <span>Run Simulation</span>
+                  </span>
                 )}
               </button>
+            )}
+
+            {/* Global error */}
+            {error && !loadingGames && availableGames.length === 0 && !selectedSport && (
+              <div className="flex items-center space-x-3 p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400">
+                <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                <span>{error}</span>
+              </div>
             )}
           </div>
         )}
