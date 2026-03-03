@@ -1,92 +1,114 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { oddsAPIClient, SPORT_KEYS } from '@/lib/odds-api/client'
-import { supabaseAdmin } from '@/lib/database/supabase-admin'
+// src/app/api/cron/fetch-events/route.ts
+//
+// Converted from Odds API to SportRadar. No references to @/lib/odds-api remain.
+// Runs on schedule (see vercel.json) to keep sports_events table current.
+// Active sports: ncaab (Phase 1). Add nfl/nba as they go live.
 
-// This endpoint should be called every 5 minutes via Vercel Cron
-// Add to vercel.json: { "path": "/api/cron/fetch-events", "schedule": "*/5 * * * *" }
+import { NextRequest, NextResponse } from 'next/server'
+import { getUpcomingGames }  from '@/lib/sportradar/games'
+import { attachOddsToGames } from '@/lib/sportradar/odds'
+import { supabaseAdmin }     from '@/lib/database/supabase-admin'
+import { SportKey }          from '@/lib/sportradar/config'
+
+const ACTIVE_SPORTS: SportKey[] = ['ncaab']
+
+function sportTitle(sport: string): string {
+  const titles: Record<string, string> = {
+    ncaab: "NCAA Men's Basketball",
+    nba:   'NBA',
+    nfl:   'NFL Football',
+  }
+  return titles[sport] ?? sport.toUpperCase()
+}
 
 export async function GET(request: NextRequest) {
-  // Verify cron secret
   const authHeader = request.headers.get('authorization')
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  try {
-    console.log('[Cron] Starting sports events fetch...')
-    
-    const results = {
-      fetched: 0,
-      updated: 0,
-      errors: [] as string[]
-    }
+  console.log('[cron/fetch-events] Starting SportRadar fetch...')
 
-    // Fetch events for all sports (Tier 1 priority)
-    const sports: Array<keyof typeof SPORT_KEYS> = ['nfl', 'nba', 'ncaab', 'ncaaf']
-
-    for (const sport of sports) {
-      try {
-        const events = await oddsAPIClient.getOdds(sport)
-        
-        for (const event of events) {
-          // Upsert event to database
-          const { error } = await supabaseAdmin
-            .from('sports_events')
-            .upsert({
-              external_event_id: event.id,
-              sport_key: event.sport_key,
-              sport_title: event.sport_title,
-              commence_time: event.commence_time,
-              home_team: event.home_team,
-              away_team: event.away_team,
-              odds_data: JSON.stringify(event.bookmakers),
-              event_status: new Date(event.commence_time) > new Date() ? 'upcoming' : 'live',
-              last_odds_update: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            }, {
-              onConflict: 'external_event_id'
-            })
-
-          if (error) {
-            console.error(`[Cron] Error upserting event ${event.id}:`, error)
-            results.errors.push(`${sport}: ${event.id}`)
-          } else {
-            results.updated++
-          }
-        }
-
-        results.fetched += events.length
-        console.log(`[Cron] Fetched ${events.length} ${sport} events`)
-        
-      } catch (error: any) {
-        console.error(`[Cron] Error fetching ${sport}:`, error.message)
-        results.errors.push(`${sport}: ${error.message}`)
-      }
-    }
-
-    // Clean up old events (completed > 7 days ago)
-    const sevenDaysAgo = new Date()
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
-    
-    await supabaseAdmin
-      .from('sports_events')
-      .delete()
-      .eq('event_status', 'completed')
-      .lt('commence_time', sevenDaysAgo.toISOString())
-
-    console.log('[Cron] Sports events fetch completed:', results)
-
-    return NextResponse.json({
-      success: true,
-      ...results,
-      timestamp: new Date().toISOString()
-    })
-
-  } catch (error: any) {
-    console.error('[Cron] Fatal error:', error)
-    return NextResponse.json(
-      { error: error.message },
-      { status: 500 }
-    )
+  const results = {
+    fetched: 0,
+    updated: 0,
+    errors:  [] as string[],
   }
+
+  for (const sport of ACTIVE_SPORTS) {
+    try {
+      let games = await getUpcomingGames(sport, 3)
+      console.log(`[cron/fetch-events] ${sport}: ${games.length} games from schedule`)
+
+      if (games.length === 0) continue
+
+      games = await attachOddsToGames(games, sport)
+      const withOdds = games.filter(g => g.spread_home !== null || g.total !== null).length
+      console.log(`[cron/fetch-events] ${sport}: ${withOdds}/${games.length} games have odds`)
+
+      const rows = games.map(g => ({
+        external_event_id: g.id,
+        sport_key:         g.sport,
+        sport_title:       sportTitle(g.sport),
+        commence_time:     g.commence_time,
+        home_team:         g.home_team,
+        away_team:         g.away_team,
+        event_status:      'upcoming',
+        odds_data: {
+          spread_home:      g.spread_home,
+          spread_home_odds: g.spread_home_odds,
+          spread_away_odds: g.spread_away_odds,
+          total:            g.total,
+          total_over_odds:  g.total_over_odds,
+          total_under_odds: g.total_under_odds,
+          moneyline_home:   g.moneyline_home,
+          moneyline_away:   g.moneyline_away,
+        },
+        home_team_sr_id:  g.home_team_id,
+        away_team_sr_id:  g.away_team_id,
+        neutral_site:     g.neutral_site,
+        season_year:      g.season_year,
+        home_alias:       g.home_alias,
+        away_alias:       g.away_alias,
+        venue_name:       g.venue_name,
+        last_odds_update: new Date().toISOString(),
+        updated_at:       new Date().toISOString(),
+      }))
+
+      const { data, error } = await supabaseAdmin
+        .from('sports_events')
+        .upsert(rows, { onConflict: 'external_event_id' })
+        .select('id')
+
+      if (error) {
+        console.error(`[cron/fetch-events] upsert error for ${sport}:`, error.message)
+        results.errors.push(`${sport}: ${error.message}`)
+      } else {
+        results.fetched += games.length
+        results.updated += data?.length ?? 0
+        console.log(`[cron/fetch-events] ${sport}: upserted ${data?.length ?? 0} rows`)
+      }
+
+    } catch (err: any) {
+      console.error(`[cron/fetch-events] error for ${sport}:`, err.message)
+      results.errors.push(`${sport}: ${err.message}`)
+    }
+  }
+
+  // Clean up completed events older than 7 days
+  const sevenDaysAgo = new Date()
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+  await supabaseAdmin
+    .from('sports_events')
+    .delete()
+    .eq('event_status', 'completed')
+    .lt('commence_time', sevenDaysAgo.toISOString())
+
+  console.log('[cron/fetch-events] Complete:', results)
+
+  return NextResponse.json({
+    success:   true,
+    ...results,
+    timestamp: new Date().toISOString(),
+  })
 }
