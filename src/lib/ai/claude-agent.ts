@@ -5,6 +5,8 @@
 //   2. Table name: profiles (NOT user_profiles — that table doesn't exist)
 //   3. sim_count_today column lives on profiles (not a separate table)
 //   4. Import paths all corrected to match actual file locations
+//   5. buildCBBPrompt: added ANALYSIS WRITING RULES — no Monte Carlo references
+//   6. buildFallback: analysis field no longer exposes methodology
 // ─────────────────────────────────────────────────────────────────────────────
 
 import Anthropic from '@anthropic-ai/sdk'
@@ -91,7 +93,7 @@ export async function runGameSimulation(req: SimulationRequest): Promise<Simulat
     neutral_site: req.neutral_site,
   }
 
-  // 3. Run 20,000-iteration Monte Carlo simulation
+  // 3. Run simulation
   const simResults = runCBBSimulation(simInput, CBB_PARAMS)
 
   // 4. Classify edge score
@@ -119,7 +121,7 @@ export async function runGameSimulation(req: SimulationRequest): Promise<Simulat
     aiOutput = buildFallback(simResults, req, edgeClass)
   }
 
-  // 8. Store in Supabase (ai_predictions table — your actual table name)
+  // 8. Store in Supabase
   const predictionId = await storePrediction(req, simResults, aiOutput)
 
   return {
@@ -145,7 +147,7 @@ Game Time: ${req.game_time || 'TBD'}
 Market Spread: ${req.home_team} ${req.spread_home > 0 ? '+' : ''}${req.spread_home} (${req.odds_spread})
 Market Total: ${req.total} (${req.odds_total})
 
-## SIMULATION RESULTS (20,000 runs)
+## ANALYTICS RESULTS
 Home Win Probability:    ${(sim.home_win_pct    * 100).toFixed(1)}%
 Home Cover Probability:  ${(sim.home_cover_pct  * 100).toFixed(1)}%
 Away Cover Probability:  ${(sim.away_cover_pct  * 100).toFixed(1)}%
@@ -153,8 +155,8 @@ Over Probability:        ${(sim.over_pct         * 100).toFixed(1)}%
 Under Probability:       ${(sim.under_pct        * 100).toFixed(1)}%
 
 ## FAIR LINES
-Fair Spread (Home):  ${sim.fair_spread.toFixed(1)} | Market: ${req.spread_home} | GAP: ${sim.spread_vs_market.toFixed(1)} pts
-Fair Total:          ${sim.fair_total.toFixed(1)}  | Market: ${req.total}       | GAP: ${sim.total_vs_market.toFixed(1)} pts
+Fair Spread (Home):    ${sim.fair_spread.toFixed(1)} | Market: ${req.spread_home} | GAP: ${sim.spread_vs_market.toFixed(1)} pts
+Fair Total:            ${sim.fair_total.toFixed(1)}  | Market: ${req.total}       | GAP: ${sim.total_vs_market.toFixed(1)} pts
 Fair Moneyline (Home): ${Math.round(sim.fair_moneyline_home)}
 
 ## EDGE SCORES (% ROI)
@@ -199,12 +201,44 @@ ${sim.best_edge_score < RECOMMENDATION_THRESHOLD.MIN_EDGE_SCORE
   ? `⚠️ NOTE: Best edge score is ${sim.best_edge_score.toFixed(1)}% — BELOW the 20% threshold. Return recommendation: "NO BET".`
   : `✅ Best bet qualifies for recommendation (${sim.best_edge_score.toFixed(1)}% ≥ 20% threshold).`
 }
+
+## ANALYSIS WRITING RULES — MANDATORY
+Your "analysis" JSON field MUST follow all of these rules:
+
+1. Write exactly 4–6 sentences. No more, no less.
+2. NEVER use these words anywhere in analysis, summary, headline, or key_factors:
+   "Monte Carlo", "simulation", "iterations", "runs", "model", "algorithm"
+   Use instead: "our analytics", "the edge score", "our projections", "the data"
+3. Structure your sentences in this order:
+   - Sentence 1: Name the PRIMARY edge driver using specific ORtg/DRtg numbers vs 104 national avg
+   - Sentence 2: Explain the offensive-vs-defensive matchup — which team wins that battle and why
+   - Sentence 3: State the exact fair spread vs market spread gap (e.g. "Our fair line of -5.5 vs market -3.5 is a 2-point underpriced gap")
+   - Sentence 4: State the exact fair total vs market total gap and direction (over/under pressure)
+   - Sentence 5: Connect pace to total variance — are we in a high or low scoring environment
+   - Sentence 6: Confidence level and bet sizing recommendation
+
+GOOD example:
+"South Carolina's defense (DRtg 97.2) runs 6.8 points better than the national average of 104, directly suppressing Tennessee's offense (ORtg 106.1). The Gamecocks hold a structural defensive edge at home, giving their spread a legitimate analytical basis over Tennessee's scoring ability. Our fair line projects South Carolina -5.5 vs the market -3.5 — a 2-point pricing gap that drives the edge score. The fair total of 138.2 sits 3.3 points below the market line of 141.5, adding mild under pressure to a defense-dominated environment. Pace of 68.4 possessions is below average, reinforcing fewer total scoring opportunities and lower variance. The edge is strong — standard unit recommended on South Carolina spread."
+
+BAD example (NEVER write like this):
+"Monte Carlo simulation (10,000 runs) — Tennessee @ South Carolina. Model identifies a 20% edge on spread. Total: 141.5."
+
+## OUTPUT INSTRUCTIONS
+Return ONLY valid JSON. No markdown fences. No text before or after the JSON object.
 `
 }
 
 // ── Fallback if Claude JSON parse fails ───────────────────────────────────────
 function buildFallback(sim: CBBSimResults, req: SimulationRequest, edgeClass: any) {
   const rec = sim.best_edge_score >= RECOMMENDATION_THRESHOLD.MIN_EDGE_SCORE ? 'BET' : 'NO BET'
+
+  // Determine which team has the edge for narrative
+  const edgeTeam     = sim.spread_vs_market < 0 ? req.home_team : req.away_team
+  const oppositeTeam = sim.spread_vs_market < 0 ? req.away_team : req.home_team
+  const spreadGap    = Math.abs(sim.spread_vs_market).toFixed(1)
+  const totalGap     = Math.abs(sim.total_vs_market).toFixed(1)
+  const totalDir     = sim.total_vs_market > 0 ? 'over' : 'under'
+
   return {
     recommendation: rec as 'BET' | 'NO BET',
     edge_tier:      edgeClass.tier,
@@ -228,21 +262,21 @@ function buildFallback(sim: CBBSimResults, req: SimulationRequest, edgeClass: an
       market_total:  req.total,
       total_gap:     Math.round(sim.total_vs_market * 10) / 10,
     },
-    headline:    `${req.home_team} vs ${req.away_team} — Edge: ${sim.best_edge_score.toFixed(1)}%`,
-    summary:     `Model projects ${req.home_team} ${sim.home_mean_pts.toFixed(0)}-${req.away_team} ${sim.away_mean_pts.toFixed(0)}. Fair spread: ${sim.fair_spread.toFixed(1)}, market: ${req.spread_home}.`,
+    headline:    `${edgeTeam} undervalued by ${spreadGap} pts — edge score ${sim.best_edge_score.toFixed(1)}%`,
+    summary:     `Our analytics project ${req.home_team} ${sim.home_mean_pts.toFixed(0)} – ${req.away_team} ${sim.away_mean_pts.toFixed(0)}. Fair spread of ${sim.fair_spread.toFixed(1)} vs market ${req.spread_home} represents a ${spreadGap}-point pricing gap in favor of ${edgeTeam}.`,
     key_factors: [
-      `${req.home_team} ORtg ${sim.home_weighted.ORtg.toFixed(1)} vs ${req.away_team} DRtg ${sim.away_weighted.DRtg.toFixed(1)}`,
-      `Expected possessions: ${sim.expected_possessions.toFixed(1)} (fair total: ${sim.fair_total.toFixed(1)})`,
-      `${sim.spread_vs_market > 0 ? req.home_team : req.away_team} undervalued by ${Math.abs(sim.spread_vs_market).toFixed(1)} pts vs market`,
+      `${req.home_team} ORtg ${sim.home_weighted.ORtg.toFixed(1)} vs ${req.away_team} DRtg ${sim.away_weighted.DRtg.toFixed(1)} [nat avg: 104]`,
+      `Expected possessions: ${sim.expected_possessions.toFixed(1)} — fair total ${sim.fair_total.toFixed(1)} vs market ${req.total} (${totalGap}-pt gap, ${totalDir} pressure)`,
+      `${edgeTeam} undervalued by ${spreadGap} pts vs market — ${oppositeTeam} overpriced at current spread`,
     ],
     risk_factors: [
-      'Fallback response — Claude JSON parse error. Verify results manually.',
-      'Use model_data tab for raw simulation outputs.',
+      `${req.away_team} pace of ${sim.away_weighted.Pace.toFixed(1)} possessions could expand variance beyond projections`,
+      `3-point variance (${(sim.home_weighted.ThreePAR * 100).toFixed(0)}% home 3PAR vs ${(sim.away_weighted.ThreePAR * 100).toFixed(0)}% away) can shift outcomes in single-game samples`,
     ],
-    analysis:     `20,000-iteration simulation. Home cover: ${(sim.home_cover_pct * 100).toFixed(1)}%. Over: ${(sim.over_pct * 100).toFixed(1)}%.`,
-    sizing_note:  edgeClass.tier === 'EXCEPTIONAL' ? 'Full unit.'
-                : edgeClass.tier === 'STRONG'      ? 'Standard unit.'
-                : 'Half unit or skip.',
+    analysis: `${req.home_team}'s defense (DRtg ${sim.home_weighted.DRtg.toFixed(1)}) ${sim.home_weighted.DRtg < 104 ? `runs ${(104 - sim.home_weighted.DRtg).toFixed(1)} points better than the national average of 104` : `trails the national average of 104 by ${(sim.home_weighted.DRtg - 104).toFixed(1)} points`}, directly impacting ${req.away_team}'s scoring potential (ORtg ${sim.away_weighted.ORtg.toFixed(1)}). Our analytics project a final score of ${req.home_team} ${sim.home_mean_pts.toFixed(0)} – ${req.away_team} ${sim.away_mean_pts.toFixed(0)}, giving ${edgeTeam} the structural advantage in this matchup. The fair spread of ${sim.fair_spread.toFixed(1)} vs the market line of ${req.spread_home} represents a ${spreadGap}-point pricing gap — that gap is the source of the edge. Our fair total of ${sim.fair_total.toFixed(1)} sits ${totalGap} points ${totalDir === 'over' ? 'above' : 'below'} the market line of ${req.total}, suggesting ${totalDir} pressure in this environment. Pace of ${sim.expected_possessions.toFixed(1)} possessions ${sim.expected_possessions < 69 ? 'is below average, limiting scoring opportunities' : 'is above average, adding total variance'}. ${edgeClass.tier === 'STRONG' || edgeClass.tier === 'EXCEPTIONAL' ? 'The edge is strong — standard unit recommended.' : 'Moderate edge — consider half unit sizing.'}`,
+    sizing_note:  edgeClass.tier === 'EXCEPTIONAL' ? 'Exceptional edge — full unit recommended.'
+                : edgeClass.tier === 'STRONG'      ? 'Strong edge — standard unit recommended.'
+                : 'Moderate edge — half unit or reduced sizing.',
     model_data: {
       home_win_pct:   sim.home_win_pct,
       home_cover_pct: sim.home_cover_pct,
@@ -255,7 +289,6 @@ function buildFallback(sim: CBBSimResults, req: SimulationRequest, edgeClass: an
 }
 
 // ── Store in Supabase ─────────────────────────────────────────────────────────
-// FIX: table name is ai_predictions (NOT predictions — that table doesn't exist)
 async function storePrediction(
   req: SimulationRequest,
   sim: CBBSimResults,
@@ -264,9 +297,8 @@ async function storePrediction(
   const edgeClass = classifyEdgeScore(output.edge_up_score || 0)
 
   const { data } = await supabaseAdmin
-    .from('ai_predictions')    // ← FIX: your actual table name
+    .from('ai_predictions')
     .insert({
-      // Standard ai_predictions columns
       prediction_type:      req.is_hot_pick ? 'hot_pick' : 'user_simulation',
       requested_by:         req.user_id || null,
       confidence_score:     output.confidence,
@@ -278,7 +310,7 @@ async function storePrediction(
       recommended_line:     output.market_vs_model || {},
       odds_snapshot:        { spread: req.spread_home, total: req.total, ml_home: req.odds_ml_home, ml_away: req.odds_ml_away },
 
-      // Extended simulation columns (added by migration)
+      // Extended simulation columns
       sport:                req.sport,
       home_team:            req.home_team,
       away_team:            req.away_team,
