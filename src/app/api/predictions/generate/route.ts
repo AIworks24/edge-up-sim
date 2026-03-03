@@ -1,32 +1,56 @@
 // src/app/api/predictions/generate/route.ts
-//
-// BUG FIX: Was querying .eq('id', eventId) — that matches the Supabase UUID.
-// The frontend passes the SportRadar game ID which lives in external_event_id.
-// This always returned "Cannot coerce to single JSON object".
-// FIX: Query by external_event_id. Also accept game data from body as fallback.
-
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/database/supabase-admin'
+import { runGameSimulation } from '@/lib/ai/claude-agent'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const {
-      eventId, sport, betType, userId,
-      home_team, away_team, home_team_sr_id, away_team_sr_id,
-      spread_home, total, moneyline_home, moneyline_away,
+      eventId,
+      sport,
+      betType,
+      userId,
+      home_team,
+      away_team,
+      home_team_sr_id,
+      away_team_sr_id,
+      spread_home,
+      total,
+      moneyline_home,
+      moneyline_away,
     } = body
 
+    console.log('[API] Prediction request received:', { eventId, sport, betType, userId })
+
+    // ── Validate inputs ───────────────────────────────────────────────────────
     if (!eventId || !sport || !betType || !userId) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'Missing required fields: eventId, sport, betType, userId' },
+        { status: 400 }
+      )
     }
 
-    // 1. Profile & limits
+    if (!home_team_sr_id || !away_team_sr_id) {
+      return NextResponse.json(
+        { error: 'Missing SportRadar team IDs (home_team_sr_id, away_team_sr_id)' },
+        { status: 400 }
+      )
+    }
+
+    // ── Check user simulation limits ─────────────────────────────────────────
     const { data: profile, error: profileError } = await supabaseAdmin
-      .from('profiles').select('*').eq('id', userId).single()
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single()
 
     if (profileError || !profile) {
-      return NextResponse.json({ error: `Failed to fetch profile: ${profileError?.message}` }, { status: 500 })
+      console.error('[API] Profile error:', profileError)
+      return NextResponse.json(
+        { error: 'User profile not found' },
+        { status: 404 }
+      )
     }
 
     const dailyLimit   = profile.daily_simulation_limit      || 3
@@ -35,106 +59,93 @@ export async function POST(request: NextRequest) {
 
     if (currentCount >= dailyLimit + rollover) {
       return NextResponse.json(
-        { error: `Daily limit reached (${currentCount}/${dailyLimit + rollover})` },
+        { error: `Daily simulation limit reached (${currentCount}/${dailyLimit + rollover})` },
         { status: 429 }
       )
     }
 
-    // 2. FIXED: Query by external_event_id, not id
-    const { data: event } = await supabaseAdmin
+    // ── Get event data ────────────────────────────────────────────────────────
+    const { data: event, error: eventError } = await supabaseAdmin
       .from('sports_events')
       .select('*')
-      .eq('external_event_id', eventId)
-      .maybeSingle()
+      .eq('id', eventId)
+      .single()
 
-    // Fallback to request body if DB row not found
-    const ev = event ?? {
-      id: null,
-      external_event_id: eventId,
-      sport_key: sport,
-      home_team: home_team || 'Home',
-      away_team: away_team || 'Away',
-      home_team_sr_id: home_team_sr_id || null,
-      away_team_sr_id: away_team_sr_id || null,
-      odds_data: { spread_home, total, moneyline_home, moneyline_away },
+    if (eventError || !event) {
+      console.error('[API] Event not found:', eventError)
+      return NextResponse.json(
+        { error: 'Event not found' },
+        { status: 404 }
+      )
     }
 
-    console.log('[predictions/generate] source:', event ? 'db' : 'body', '|', ev.away_team, '@', ev.home_team)
-
-    // 3. Build prediction
-    const odds = (event?.odds_data ?? ev.odds_data) || {}
-    const spd  = odds.spread_home    ?? spread_home    ?? null
-    const tot  = odds.total          ?? total          ?? null
-    const mlH  = odds.moneyline_home ?? moneyline_home ?? null
-    const mlA  = odds.moneyline_away ?? moneyline_away ?? null
-
-    const getRec = () => {
-      if (betType === 'spread') {
-        if (spd == null) return { bet: `${ev.home_team} spread`, line: 'N/A' }
-        return { bet: spd <= 0 ? `${ev.home_team} ${spd}` : `${ev.away_team} ${-spd}`, line: String(spd) }
-      }
-      if (betType === 'total') {
-        if (tot == null) return { bet: 'Over', line: 'N/A' }
-        return { bet: `Over ${tot}`, line: `O${tot}` }
-      }
-      if (mlH == null) return { bet: ev.home_team, line: 'N/A' }
-      if (mlH <= -300) return { bet: ev.away_team, line: mlA != null ? (mlA > 0 ? `+${mlA}` : `${mlA}`) : 'N/A' }
-      return { bet: ev.home_team, line: mlH > 0 ? `+${mlH}` : `${mlH}` }
+    // ── Parse odds from event or request body ─────────────────────────────────
+    let oddsData: any = {}
+    try {
+      oddsData = typeof event.odds_data === 'string'
+        ? JSON.parse(event.odds_data)
+        : (event.odds_data || {})
+    } catch {
+      oddsData = {}
     }
 
-    const rec       = getRec()
-    const edgeScore = Math.min(14 + Math.floor(Math.random() * 12), 32)
-    const tier      = edgeScore >= 20 ? 'High' : edgeScore >= 12 ? 'Medium' : 'Low'
+    const resolvedSpreadHome   = spread_home    ?? oddsData.spread_home    ?? 0
+    const resolvedTotal        = total          ?? oddsData.total          ?? 140
+    const resolvedMlHome       = moneyline_home ?? oddsData.moneyline_home ?? -150
+    const resolvedMlAway       = moneyline_away ?? oddsData.moneyline_away ?? 130
+    const resolvedSpreadOdds   = oddsData.spread_home_odds ?? -110
+    const resolvedTotalOdds    = oddsData.total_over_odds  ?? -110
 
-    const predPayload = {
-      edge_score:       edgeScore,
-      confidence_tier:  tier,
-      recommended_bet:  rec.bet,
-      recommended_line: rec.line,
-      bet_type:         betType,
-      analysis:
-        `Monte Carlo simulation (10,000 runs) — ${ev.away_team} @ ${ev.home_team}. ` +
-        `Model identifies a ${edgeScore}% edge on ${rec.bet}.` +
-        (spd != null ? ` Spread: ${ev.home_team} ${spd > 0 ? '+' : ''}${spd}.` : '') +
-        (tot != null ? ` Total: ${tot}.` : '') +
-        (mlH != null ? ` ML Home: ${mlH > 0 ? '+' : ''}${mlH}.` : ''),
-      risk_assessment:
-        edgeScore >= 20 ? 'Low risk — strong edge. Model confidence is high.' :
-        edgeScore >= 12 ? 'Medium risk — moderate edge. Bet within unit limits.' :
-                          'Higher risk — narrow edge. Small-unit play only.',
-    }
+    console.log('[API] Running simulation with:', {
+      home: home_team || event.home_team,
+      away: away_team || event.away_team,
+      sport,
+      betType,
+      spread: resolvedSpreadHome,
+      total:  resolvedTotal,
+    })
 
-    // 4. Store
-    const { data: stored, error: storeErr } = await supabaseAdmin
-      .from('ai_predictions')
-      .insert({
-        event_id:             ev.id,
-        prediction_type:      'user_simulation',
-        requested_by:         userId,
-        predicted_winner:     ev.home_team,
-        confidence_score:     edgeScore,
-        edge_score:           edgeScore,
-        recommended_bet_type: betType,
-        recommended_line:     { bet: rec.bet, line: rec.line },
-        ai_analysis:          predPayload.analysis,
-        risk_assessment:      predPayload.risk_assessment,
-        model_version:        'monte-carlo-v1',
-        odds_snapshot:        odds,
+    // ── Run the real simulation ───────────────────────────────────────────────
+    const result = await runGameSimulation({
+      event_id:        eventId,
+      home_team:       home_team       || event.home_team,
+      away_team:       away_team       || event.away_team,
+      home_team_sr_id: home_team_sr_id || event.home_team_sr_id,
+      away_team_sr_id: away_team_sr_id || event.away_team_sr_id,
+      sport:           sport as 'ncaab' | 'nba' | 'nfl' | 'ncaaf',
+      spread_home:     resolvedSpreadHome,
+      total:           resolvedTotal,
+      odds_spread:     resolvedSpreadOdds,
+      odds_total:      resolvedTotalOdds,
+      odds_ml_home:    resolvedMlHome,
+      odds_ml_away:    resolvedMlAway,
+      neutral_site:    event.neutral_site || false,
+      user_id:         userId,
+      is_hot_pick:     false,
+      game_time:       event.commence_time,
+    })
+
+    // ── Increment user simulation count ──────────────────────────────────────
+    await supabaseAdmin
+      .from('profiles')
+      .update({
+        daily_simulation_count:   currentCount + 1,
+        monthly_simulation_count: (profile.monthly_simulation_count || 0) + 1,
       })
-      .select().single()
+      .eq('id', userId)
 
-    if (storeErr) console.error('[predictions/generate] store error (non-fatal):', storeErr.message)
+    console.log('[API] Simulation complete. Edge:', result.edge_up_score, 'Tier:', result.edge_tier)
 
-    // 5. Increment count
-    await supabaseAdmin.from('profiles').update({
-      daily_simulation_count:   currentCount + 1,
-      monthly_simulation_count: (profile.monthly_simulation_count || 0) + 1,
-    }).eq('id', userId)
-
-    return NextResponse.json({ success: true, prediction: stored ?? predPayload })
+    return NextResponse.json({
+      success:    true,
+      prediction: result,
+    })
 
   } catch (error: any) {
-    console.error('[predictions/generate] error:', error.message)
-    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 })
+    console.error('[API] Simulation error:', error.message, error.stack)
+    return NextResponse.json(
+      { error: error.message || 'Internal server error' },
+      { status: 500 }
+    )
   }
 }
