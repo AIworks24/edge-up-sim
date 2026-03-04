@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
   // ── 1. Pull all simulations created today ─────────────────────────────────
   const { data: todaySims, error } = await supabaseAdmin
     .from('ai_predictions')
-    .select('id, edge_score, edge_tier, recommendation, game_time, home_team, away_team, sport, confidence_score, prediction_type')
+    .select('id, edge_score, edge_tier, game_time, home_team, away_team, sport, confidence_score, prediction_type')
     .gte('created_at', `${today}T00:00:00.000Z`)
     .not('edge_score', 'is', null)
     .order('edge_score', { ascending: false })
@@ -68,14 +68,13 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  // ── 3. Pick the best — prefer BET recommendation, highest edge score ───────
-  let topPicks = futureSims
-    .filter(s => s.recommendation === 'BET')
-    .slice(0, 5)
+  // ── 3. Pick the best — top 5 by edge_score ───────────────────────────────
+  // edge_score >= 20 = strong picks (STRONG/EXCEPTIONAL tier)
+  // if none hit that bar, take top 3 regardless so dashboard is never empty
+  let topPicks = futureSims.filter(s => (s.edge_score ?? 0) >= 20).slice(0, 5)
 
-  // Fallback: no BET recommendations yet — take top 3 by edge score
   if (topPicks.length === 0) {
-    console.log('[HOT PICKS] No BET recommendations found — using top-3 fallback')
+    console.log('[HOT PICKS] No picks with edge_score >= 20 — using top-3 fallback')
     topPicks = futureSims.slice(0, 3)
   }
 
@@ -109,7 +108,7 @@ export async function GET(req: NextRequest) {
       sport:      p.sport,
       edge_score: p.edge_score,
       edge_tier:  p.edge_tier,
-      type:       p.prediction_type,
+      type:       p.prediction_type ?? 'user_simulation',
     })),
   })
 }
