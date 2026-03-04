@@ -1,210 +1,185 @@
 'use client'
-// src/app/history/page.tsx
-//
-// Full redesign: matches dark slate / glassmorphism design system used
-// across the rest of the app. Includes:
-//   - Performance stat cards (total, correct, win rate, avg edge)
-//   - Filter tabs: All | Hot Picks | My Simulations
-//   - Prediction cards with full data display (edge score, tier, bet, result)
-//   - Empty state and loading skeleton
-//   - Navigation consistent with rest of app
-// ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect } from 'react'
-import { useRouter }           from 'next/navigation'
-import Link                    from 'next/link'
-import {
-  BarChart3, ChevronLeft, TrendingUp, Target,
-  Percent, Flame, Calendar, CheckCircle2, XCircle,
-  Clock, ChevronDown, ChevronUp, Zap,
-} from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/database/supabase-client'
+import Link from 'next/link'
+import {
+  ArrowLeft, Flame, Zap, Clock, TrendingUp,
+  CheckCircle2, XCircle, Trophy, BarChart3,
+  ChevronDown, ChevronUp, Calendar
+} from 'lucide-react'
 
-type FilterType = 'all' | 'hot_pick' | 'user_simulation'
-
-interface Stats {
-  total:         number
-  correct:       number
-  winRate:       number
-  avgEdge:       number
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function edgeBadge(tier: string) {
+  const map: Record<string, string> = {
+    EXCEPTIONAL: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30',
+    STRONG:      'bg-green-500/20 text-green-300 border border-green-500/30',
+    MODERATE:    'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30',
+    RISKY:       'bg-orange-500/20 text-orange-300 border border-orange-500/30',
+  }
+  return map[tier] ?? 'bg-white/10 text-gray-400 border border-white/10'
 }
 
-const TIER_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  EXCEPTIONAL: { label: 'Exceptional', color: 'text-emerald-300', bg: 'bg-emerald-500/10 border-emerald-500/30' },
-  STRONG:      { label: 'Strong',      color: 'text-green-300',   bg: 'bg-green-500/10  border-green-500/30'   },
-  MODERATE:    { label: 'Moderate',    color: 'text-yellow-300',  bg: 'bg-yellow-500/10 border-yellow-500/30'  },
-  RISKY:       { label: 'Risky',       color: 'text-orange-300',  bg: 'bg-orange-500/10 border-orange-500/30'  },
-  NO_VALUE:    { label: 'No Value',    color: 'text-gray-400',    bg: 'bg-gray-500/10   border-gray-500/30'    },
-}
-
-function formatDate(iso: string) {
-  if (!iso) return '—'
+function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
   })
 }
 
-function formatTime(iso: string) {
-  if (!iso) return ''
-  return new Date(iso).toLocaleTimeString('en-US', {
-    hour: 'numeric', minute: '2-digit',
-  })
+function fmtOdds(n: number | null) {
+  if (n == null) return '—'
+  return n > 0 ? `+${n}` : `${n}`
 }
 
-// ── Expandable prediction card ────────────────────────────────────────────────
-function PredictionCard({ pred }: { pred: any }) {
-  const [expanded, setExpanded] = useState(false)
-
-  const tier      = TIER_CONFIG[pred.edge_tier] ?? TIER_CONFIG.NO_VALUE
-  const isHotPick = pred.prediction_type === 'hot_pick'
-  const resolved  = pred.was_correct !== null
-  const correct   = pred.was_correct === true
-
-  const gameDate  = pred.game_time ?? pred.created_at
-  const homeTeam  = pred.home_team ?? pred.event?.home_team ?? '—'
-  const awayTeam  = pred.away_team ?? pred.event?.away_team ?? '—'
-  const sport     = pred.sport     ?? pred.event?.sport_title ?? ''
+// ── Expandable simulation card ────────────────────────────────────────────────
+function SimCard({ pred }: { pred: any }) {
+  const [open, setOpen] = useState(false)
+  const tp      = pred.recommended_line?.top_pick
+  const isBet   = (pred.edge_score ?? 0) >= 20
+  const factors = Array.isArray(pred.key_factors) ? pred.key_factors : []
 
   return (
-    <div className={`bg-slate-800/50 backdrop-blur-xl border rounded-2xl overflow-hidden transition hover:bg-slate-800/70 ${
-      resolved
-        ? correct
-          ? 'border-emerald-500/30'
-          : 'border-red-500/20'
-        : 'border-white/10'
+    <div className={`bg-slate-800/60 border rounded-2xl overflow-hidden transition ${
+      isBet ? 'border-green-500/30' : 'border-white/5'
     }`}>
-      {/* Card header */}
-      <div className="p-5">
-        <div className="flex items-start justify-between gap-4">
-          {/* Left: matchup info */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-2 flex-wrap">
-              {isHotPick ? (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-orange-500/20 border border-orange-500/30 text-orange-300">
-                  <Flame className="w-3 h-3" /> Hot Pick
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-blue-500/20 border border-blue-500/30 text-blue-300">
-                  <Zap className="w-3 h-3" /> Simulation
-                </span>
-              )}
-              {sport && (
-                <span className="text-xs text-gray-500 uppercase tracking-wider">{sport}</span>
-              )}
-              {resolved ? (
-                correct ? (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-500/15 border border-emerald-500/30 text-emerald-300">
-                    <CheckCircle2 className="w-3 h-3" /> Correct
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-red-500/15 border border-red-500/30 text-red-400">
-                    <XCircle className="w-3 h-3" /> Incorrect
-                  </span>
-                )
-              ) : (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-slate-600/50 text-gray-400">
-                  <Clock className="w-3 h-3" /> Pending
-                </span>
-              )}
-            </div>
+      {/* Header row */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full px-6 py-4 flex items-center justify-between hover:bg-white/5 transition text-left"
+      >
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Type badge */}
+          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+            pred.prediction_type === 'hot_pick'
+              ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30'
+              : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+          }`}>
+            {pred.prediction_type === 'hot_pick' ? '🔥 Hot Pick' : '⚡ My Sim'}
+          </span>
 
-            <p className="text-xs text-gray-500 uppercase tracking-wider mb-0.5">{awayTeam} @</p>
-            <p className="text-lg font-black text-white leading-tight">{homeTeam}</p>
-            <div className="flex items-center gap-1 mt-1 text-xs text-gray-500">
-              <Calendar className="w-3 h-3" />
-              <span>{formatDate(gameDate)}</span>
-              {formatTime(gameDate) && <span>· {formatTime(gameDate)}</span>}
-            </div>
+          {/* Game */}
+          <div>
+            <span className="text-xs text-gray-500">{pred.away_team} @</span>{' '}
+            <span className="text-white font-bold">{pred.home_team}</span>
           </div>
 
-          {/* Right: edge score + tier */}
-          <div className="text-right shrink-0">
-            <div className={`text-3xl font-black ${tier.color}`}>
-              {pred.edge_score != null ? `${pred.edge_score.toFixed(1)}%` : '—'}
-            </div>
-            <div className={`mt-1 inline-block text-xs font-bold px-2 py-0.5 rounded-full border ${tier.bg} ${tier.color}`}>
-              {tier.label}
-            </div>
-          </div>
+          {/* Date */}
+          <span className="text-xs text-gray-500">{fmtDate(pred.created_at)}</span>
         </div>
 
-        {/* Recommendation line */}
-        {pred.recommended_line && (
-          <div className="mt-4 p-3 bg-slate-700/40 rounded-xl border border-white/5">
-            <p className="text-xs text-gray-500 mb-0.5 uppercase tracking-wider">Recommendation</p>
-            <p className="text-sm font-semibold text-white">
-              {typeof pred.recommended_line === 'string'
-                ? pred.recommended_line
-                : pred.recommended_line?.top_pick?.label ?? JSON.stringify(pred.recommended_line)}
-            </p>
+        <div className="flex items-center gap-3 shrink-0">
+          {/* Outcome */}
+          {pred.was_correct === true  && <CheckCircle2 className="w-4 h-4 text-green-400" />}
+          {pred.was_correct === false && <XCircle      className="w-4 h-4 text-red-400"   />}
+
+          {/* Edge */}
+          <span className={`text-sm font-black ${
+            (pred.edge_score ?? 0) >= 20 ? 'text-green-400' :
+            (pred.edge_score ?? 0) >= 10 ? 'text-yellow-400' : 'text-gray-400'
+          }`}>
+            {pred.edge_score?.toFixed(1)}%
+          </span>
+
+          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${edgeBadge(pred.edge_tier)}`}>
+            {pred.edge_tier}
+          </span>
+
+          {open ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+        </div>
+      </button>
+
+      {/* Expanded detail */}
+      {open && (
+        <div className="px-6 pb-6 border-t border-white/5 pt-4 space-y-4">
+
+          {/* Top pick recommendation */}
+          {tp && (
+            <div className="bg-slate-700/50 rounded-xl p-4">
+              <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Top Pick</p>
+              <p className="text-white font-bold text-lg">{tp.label}</p>
+              <div className="flex items-center gap-4 mt-2 text-sm text-gray-400">
+                <span>Edge <span className="text-white font-semibold">{tp.edge_pct?.toFixed(1)}%</span></span>
+                <span>Win Prob <span className="text-white font-semibold">{tp.win_pct?.toFixed(1)}%</span></span>
+                <span>Odds <span className="text-white font-semibold">{fmtOdds(tp.odds)}</span></span>
+              </div>
+              {tp.analysis && <p className="text-gray-300 text-sm mt-3 leading-relaxed">{tp.analysis}</p>}
+            </div>
+          )}
+
+          {/* Projected score + sim stats */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {pred.projected_away_score != null && (
+              <div className="bg-slate-700/30 rounded-xl p-3 text-center">
+                <p className="text-xs text-gray-500 mb-1">{pred.away_team?.split(' ').pop()}</p>
+                <p className="text-xl font-black text-white">{pred.projected_away_score?.toFixed(0)}</p>
+              </div>
+            )}
+            {pred.projected_home_score != null && (
+              <div className="bg-slate-700/30 rounded-xl p-3 text-center">
+                <p className="text-xs text-gray-500 mb-1">{pred.home_team?.split(' ').pop()}</p>
+                <p className="text-xl font-black text-white">{pred.projected_home_score?.toFixed(0)}</p>
+              </div>
+            )}
+            {pred.sim_home_win_pct != null && (
+              <div className="bg-slate-700/30 rounded-xl p-3 text-center">
+                <p className="text-xs text-gray-500 mb-1">Home Win%</p>
+                <p className="text-xl font-black text-white">{(pred.sim_home_win_pct * 100).toFixed(0)}%</p>
+              </div>
+            )}
+            {pred.sim_over_pct != null && (
+              <div className="bg-slate-700/30 rounded-xl p-3 text-center">
+                <p className="text-xs text-gray-500 mb-1">Over%</p>
+                <p className="text-xl font-black text-white">{(pred.sim_over_pct * 100).toFixed(0)}%</p>
+              </div>
+            )}
           </div>
-        )}
 
-        {/* Expand toggle */}
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="mt-4 flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition"
-        >
-          {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-          {expanded ? 'Hide details' : 'Show details'}
-        </button>
-      </div>
-
-      {/* Expanded details */}
-      {expanded && (
-        <div className="px-5 pb-5 border-t border-white/5 pt-4 space-y-4">
-          {/* Sim metrics */}
-          {(pred.sim_home_win_pct != null || pred.confidence_score != null) && (
-            <div className="grid grid-cols-3 gap-3">
-              {pred.confidence_score != null && (
-                <div className="bg-slate-700/30 rounded-xl p-3 text-center">
-                  <div className="text-lg font-black text-white">{pred.confidence_score.toFixed(0)}%</div>
-                  <div className="text-xs text-gray-500 mt-0.5">Confidence</div>
-                </div>
-              )}
-              {pred.sim_home_win_pct != null && (
-                <div className="bg-slate-700/30 rounded-xl p-3 text-center">
-                  <div className="text-lg font-black text-blue-300">{(pred.sim_home_win_pct * 100).toFixed(1)}%</div>
-                  <div className="text-xs text-gray-500 mt-0.5">Home Win</div>
-                </div>
-              )}
-              {pred.sim_home_cover_pct != null && (
-                <div className="bg-slate-700/30 rounded-xl p-3 text-center">
-                  <div className="text-lg font-black text-purple-300">{(pred.sim_home_cover_pct * 100).toFixed(1)}%</div>
-                  <div className="text-xs text-gray-500 mt-0.5">Cover %</div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Projected scores */}
-          {pred.projected_home_score != null && (
-            <div className="bg-slate-700/30 rounded-xl p-3">
-              <p className="text-xs text-gray-500 mb-2 uppercase tracking-wider">Projected Score</p>
-              <div className="flex justify-between text-sm font-bold text-white">
-                <span>{homeTeam}: {pred.projected_home_score.toFixed(0)}</span>
-                <span>{awayTeam}: {pred.projected_away_score?.toFixed(0) ?? '—'}</span>
-              </div>
-            </div>
-          )}
-
-          {/* Actual score if resolved */}
-          {resolved && pred.actual_score && (
-            <div className={`rounded-xl p-3 border ${correct ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-red-500/10 border-red-500/20'}`}>
-              <p className="text-xs text-gray-500 mb-2 uppercase tracking-wider">Final Score</p>
-              <div className="flex justify-between text-sm font-bold text-white">
-                <span>{homeTeam}: {pred.actual_score.home}</span>
-                <span>{awayTeam}: {pred.actual_score.away}</span>
-              </div>
-            </div>
-          )}
-
-          {/* AI analysis snippet */}
+          {/* AI analysis */}
           {pred.ai_analysis && (
-            <div className="bg-slate-700/30 rounded-xl p-3">
-              <p className="text-xs text-gray-500 mb-2 uppercase tracking-wider">AI Analysis</p>
-              <p className="text-xs text-gray-300 leading-relaxed line-clamp-4">{pred.ai_analysis}</p>
+            <div>
+              <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Analysis</p>
+              <p className="text-gray-300 text-sm leading-relaxed">{pred.ai_analysis}</p>
             </div>
+          )}
+
+          {/* Key factors */}
+          {factors.length > 0 && (
+            <div>
+              <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Key Factors</p>
+              <ul className="space-y-1">
+                {factors.map((f: string, i: number) => (
+                  <li key={i} className="text-sm text-gray-300 flex items-start gap-2">
+                    <span className="text-blue-400 mt-0.5">›</span>
+                    {f}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Market lines */}
+          <div className="flex flex-wrap gap-4 text-sm text-gray-400">
+            {pred.market_spread != null && (
+              <span>Spread <span className="text-white">{pred.market_spread > 0 ? '+' : ''}{pred.market_spread}</span></span>
+            )}
+            {pred.market_total != null && (
+              <span>Total <span className="text-white">{pred.market_total}</span></span>
+            )}
+            {pred.fair_spread != null && (
+              <span>Fair Spread <span className="text-blue-300">{pred.fair_spread > 0 ? '+' : ''}{pred.fair_spread?.toFixed(1)}</span></span>
+            )}
+            {pred.fair_total != null && (
+              <span>Fair Total <span className="text-blue-300">{pred.fair_total?.toFixed(1)}</span></span>
+            )}
+          </div>
+
+          {/* Game time */}
+          {pred.game_time && (
+            <p className="text-xs text-gray-600">
+              Game: {fmtDate(pred.game_time)}
+            </p>
           )}
         </div>
       )}
@@ -212,202 +187,171 @@ function PredictionCard({ pred }: { pred: any }) {
   )
 }
 
-// ── Main page ────────────────────────────────────────────────────────────────
+// ── Main page ─────────────────────────────────────────────────────────────────
 export default function HistoryPage() {
   const router = useRouter()
-  const [user,        setUser]        = useState<any>(null)
-  const [predictions, setPredictions] = useState<any[]>([])
-  const [stats,       setStats]       = useState<Stats>({ total: 0, correct: 0, winRate: 0, avgEdge: 0 })
-  const [loading,     setLoading]     = useState(true)
-  const [filter,      setFilter]      = useState<FilterType>('all')
+  const [simulations, setSimulations] = useState<any[]>([])
+  const [hotPicks,    setHotPicks]    = useState<any[]>([])
+  const [filter, setFilter] = useState<'all' | 'hot_pick' | 'user_simulation'>('all')
+  const [loading, setLoading] = useState(true)
+  const [stats, setStats] = useState({
+    total: 0, correct: 0, winRate: 0, avgEdge: 0,
+  })
 
-  useEffect(() => {
-    checkUser()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter])
+  useEffect(() => { loadHistory() }, [filter])
 
-  async function checkUser() {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) { router.push('/login'); return }
-    setUser(session.user)
-    await loadHistory(session.user.id)
-  }
-
-  async function loadHistory(userId: string) {
+  async function loadHistory() {
     setLoading(true)
     try {
-      let query = supabase
-        .from('ai_predictions')
-        .select(`
-          id,
-          home_team,
-          away_team,
-          sport,
-          game_time,
-          edge_score,
-          edge_tier,
-          confidence_score,
-          recommended_bet_type,
-          recommended_line,
-          projected_home_score,
-          projected_away_score,
-          ai_analysis,
-          market_spread,
-          market_total,
-          sim_home_win_pct,
-          sim_home_cover_pct,
-          sim_over_pct,
-          prediction_type,
-          was_correct,
-          actual_score,
-          created_at,
-          is_daily_pick
-        `)
-        .eq('requested_by', userId)
-        .order('created_at', { ascending: false })
-        .limit(100)
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) { router.push('/login'); return }
 
-      if (filter !== 'all') {
-        query = query.eq('prediction_type', filter)
-      }
+      // Call server-side API route — uses supabaseAdmin, bypasses RLS
+      const res = await fetch(
+        `/api/predictions/history?type=${filter}&limit=100`,
+        { headers: { Authorization: `Bearer ${session.access_token}` } }
+      )
 
-      const { data, error } = await query
-      if (error) throw error
+      if (!res.ok) throw new Error('Failed to load history')
 
-      if (data) {
-        setPredictions(data)
-        calcStats(data)
-      }
+      const data = await res.json()
+      setSimulations(data.simulations || [])
+      setHotPicks(data.hot_picks || [])
+
+      // Calculate stats from user's own simulations
+      const resolved = (data.simulations || []).filter((p: any) => p.was_correct !== null)
+      const correct  = resolved.filter((p: any) => p.was_correct === true).length
+      const edges    = (data.simulations || []).map((p: any) => p.edge_score || 0)
+      const avgEdge  = edges.length ? edges.reduce((a: number, b: number) => a + b, 0) / edges.length : 0
+
+      setStats({
+        total:   data.simulations?.length || 0,
+        correct,
+        winRate: resolved.length ? Math.round((correct / resolved.length) * 100) : 0,
+        avgEdge: Math.round(avgEdge * 10) / 10,
+      })
     } catch (err) {
-      console.error('[History] Error loading predictions:', err)
+      console.error('Error loading history:', err)
     } finally {
       setLoading(false)
     }
   }
 
-  function calcStats(preds: any[]) {
-    const resolved = preds.filter(p => p.was_correct !== null)
-    const correct  = resolved.filter(p => p.was_correct === true).length
-    const winRate  = resolved.length > 0 ? (correct / resolved.length) * 100 : 0
-    const avgEdge  = preds.length > 0
-      ? preds.reduce((sum, p) => sum + (p.edge_score ?? 0), 0) / preds.length
-      : 0
-
-    setStats({ total: preds.length, correct, winRate, avgEdge })
-  }
-
-  const filterTabs: { key: FilterType; label: string; icon: React.ElementType }[] = [
-    { key: 'all',             label: 'All',           icon: BarChart3 },
-    { key: 'hot_pick',        label: 'Hot Picks',     icon: Flame     },
-    { key: 'user_simulation', label: 'My Simulations', icon: Zap      },
-  ]
-
   const statCards = [
-    { label: 'Total Predictions', value: stats.total.toString(),            color: 'text-white',        icon: Target      },
-    { label: 'Correct Picks',     value: stats.correct.toString(),           color: 'text-emerald-400',  icon: CheckCircle2 },
-    { label: 'Win Rate',          value: `${stats.winRate.toFixed(1)}%`,     color: 'text-blue-400',     icon: TrendingUp  },
-    { label: 'Avg Edge Score',    value: `+${stats.avgEdge.toFixed(1)}%`,    color: 'text-purple-400',   icon: Percent     },
+    { label: 'Total Sims',  value: stats.total,              icon: BarChart3,  color: 'text-blue-400'   },
+    { label: 'Win Rate',    value: `${stats.winRate}%`,      icon: Trophy,     color: 'text-green-400'  },
+    { label: 'Correct',     value: stats.correct,            icon: CheckCircle2, color: 'text-emerald-400'},
+    { label: 'Avg Edge',    value: `${stats.avgEdge}%`,      icon: TrendingUp, color: 'text-purple-400' },
   ]
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-
+    <div className="min-h-screen bg-slate-900 text-white">
       {/* Header */}
-      <header className="bg-slate-900/80 backdrop-blur-xl border-b border-white/10 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link
-              href="/dashboard"
-              className="flex items-center gap-2 text-gray-400 hover:text-white transition text-sm font-medium"
-            >
-              <ChevronLeft className="w-4 h-4" /> Dashboard
+      <div className="border-b border-white/5 bg-slate-900/80 backdrop-blur sticky top-0 z-10">
+        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Link href="/dashboard" className="p-2 hover:bg-white/10 rounded-lg transition">
+              <ArrowLeft className="w-5 h-5" />
             </Link>
-            <div className="h-4 w-px bg-white/10" />
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 bg-purple-500/20 rounded-lg">
-                <BarChart3 className="w-4 h-4 text-purple-400" />
-              </div>
-              <h1 className="text-lg font-black text-white">Prediction History</h1>
+            <div>
+              <h1 className="text-lg font-bold text-white">Simulation History</h1>
+              <p className="text-xs text-gray-500">Your predictions and today's hot picks</p>
             </div>
           </div>
+          <Link
+            href="/simulate"
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-xl text-sm font-bold transition"
+          >
+            <Zap className="w-4 h-4" />
+            New Sim
+          </Link>
         </div>
-      </header>
+      </div>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <div className="max-w-5xl mx-auto px-6 py-8 space-y-8">
 
-        {/* Stats overview */}
+        {/* Stats row */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {statCards.map((card, i) => (
-            <div key={i} className="bg-slate-800/50 backdrop-blur-xl border border-white/10 rounded-2xl p-5 hover:bg-slate-800/70 transition">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="p-2 bg-white/5 rounded-lg">
-                  <card.icon className="w-4 h-4 text-gray-400" />
-                </div>
-                <span className="text-xs text-gray-500 uppercase tracking-wider">{card.label}</span>
-              </div>
-              <div className={`text-3xl font-black ${card.color}`}>{card.value}</div>
+          {statCards.map(s => (
+            <div key={s.label} className="bg-slate-800/60 border border-white/5 rounded-2xl p-4 text-center">
+              <s.icon className={`w-5 h-5 ${s.color} mx-auto mb-2`} />
+              <p className="text-2xl font-black text-white">{s.value}</p>
+              <p className="text-xs text-gray-500 mt-1">{s.label}</p>
             </div>
           ))}
         </div>
 
-        {/* Filter tabs */}
-        <div className="flex gap-2 bg-slate-800/40 border border-white/10 rounded-2xl p-1.5 w-fit">
-          {filterTabs.map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => setFilter(tab.key)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${
-                filter === tab.key
-                  ? 'bg-slate-700 text-white shadow'
-                  : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              <tab.icon className="w-4 h-4" />
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Predictions list */}
-        {loading ? (
-          <div className="space-y-4">
-            {[1, 2, 3].map(i => (
-              <div key={i} className="bg-slate-800/40 border border-white/10 rounded-2xl p-5 animate-pulse h-40" />
-            ))}
-          </div>
-        ) : predictions.length === 0 ? (
-          <div className="bg-slate-800/50 border border-white/10 rounded-3xl p-16 text-center">
-            <div className="w-20 h-20 bg-slate-700/50 rounded-3xl flex items-center justify-center mx-auto mb-6">
-              <BarChart3 className="w-10 h-10 text-gray-500" />
+        {/* Today's Hot Picks section */}
+        {hotPicks.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 mb-4">
+              <Flame className="w-5 h-5 text-orange-400" />
+              <h2 className="text-lg font-bold text-white">Today's Hot Picks</h2>
+              <span className="text-xs bg-orange-500/20 text-orange-300 border border-orange-500/30 px-2 py-0.5 rounded-full">
+                {hotPicks.length} picks
+              </span>
             </div>
-            <h3 className="text-2xl font-black text-white mb-3">No predictions yet</h3>
-            <p className="text-gray-400 mb-8 max-w-md mx-auto">
-              {filter === 'all'
-                ? 'Your simulation history will appear here once you run your first prediction or receive hot picks.'
-                : filter === 'hot_pick'
-                ? 'No hot picks in your history yet. They appear automatically each day.'
-                : 'Run a custom simulation to see your results here.'}
-            </p>
-            <Link
-              href="/simulate"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white rounded-xl font-bold transition shadow-lg shadow-blue-500/30"
-            >
-              <Zap className="w-5 h-5" />
-              Run a Simulation
-            </Link>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <p className="text-xs text-gray-500 uppercase tracking-wider">
-              Showing {predictions.length} prediction{predictions.length !== 1 ? 's' : ''}
-            </p>
-            {predictions.map(pred => (
-              <PredictionCard key={pred.id} pred={pred} />
-            ))}
+            <div className="space-y-3">
+              {hotPicks.map((pick: any) => (
+                <SimCard key={pick.id} pred={{ ...pick, prediction_type: 'hot_pick', created_at: new Date().toISOString() }} />
+              ))}
+            </div>
           </div>
         )}
 
-      </main>
+        {/* My Simulations section */}
+        <div>
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+            <div className="flex items-center gap-2">
+              <Zap className="w-5 h-5 text-blue-400" />
+              <h2 className="text-lg font-bold text-white">My Simulations</h2>
+            </div>
+
+            {/* Filter tabs */}
+            <div className="flex gap-2">
+              {(['all', 'user_simulation', 'hot_pick'] as const).map(f => (
+                <button
+                  key={f}
+                  onClick={() => setFilter(f)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                    filter === f
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-700 text-gray-400 hover:text-white'
+                  }`}
+                >
+                  {f === 'all' ? 'All' : f === 'user_simulation' ? 'My Sims' : 'Hot Picks'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="text-center py-16">
+              <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+              <p className="text-gray-500 text-sm">Loading your history...</p>
+            </div>
+          ) : simulations.length === 0 ? (
+            <div className="bg-slate-800/60 border border-white/5 rounded-2xl p-12 text-center">
+              <Calendar className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+              <p className="text-gray-400 font-medium mb-2">No simulations yet</p>
+              <p className="text-gray-600 text-sm mb-6">Run a simulation on an upcoming game to see your history here.</p>
+              <Link
+                href="/simulate"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 rounded-xl text-sm font-bold transition"
+              >
+                <Zap className="w-4 h-4" />
+                Run Your First Simulation
+              </Link>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {simulations.map((pred: any) => (
+                <SimCard key={pred.id} pred={pred} />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
