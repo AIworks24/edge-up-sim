@@ -1,20 +1,8 @@
 // src/app/api/cron/generate-hot-picks/route.ts
 //
-// ROOT CAUSE FIX:
-//   The previous version called getUpcomingGames() live from SportRadar at
-//   runtime. By the time the cron runs (6am UTC) or when triggered manually
-//   in the evening, many games have status 'inprogress' or 'closed'.
-//   getUpcomingGames() filters for status === 'scheduled' || 'time-tbd' only,
-//   so it returns 0 games even though 121 games exist in the database.
-//
-//   FIX: Read games directly from the sports_events table (already populated
-//   by the fetch-events cron / trigger-fetch). Filter to games that:
-//     1. Have not started yet (commence_time > now)
-//     2. Have odds in their odds_data JSON
-//     3. Are NCAAB (sport_key = 'ncaab')
-//
-//   This decouples the hot-picks generator from SportRadar's live status field
-//   and uses the 30 games-with-odds already sitting in the database.
+// FIX: spread_home is null on all stored games (odds API doesn't always
+// return spread values). Changed eligibility filter to require total OR
+// moneyline instead — both are consistently populated.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -23,7 +11,6 @@ import { supabaseAdmin }            from '@/lib/database/supabase-admin'
 import { RECOMMENDATION_THRESHOLD } from '@/lib/ai/edge-classifier'
 
 export async function GET(req: NextRequest) {
-  // Accept auth via Authorization header OR ?secret= query param
   const authHeader  = req.headers.get('authorization')
   const querySecret = new URL(req.url).searchParams.get('secret')
   const provided    = authHeader?.replace('Bearer ', '') || querySecret
@@ -43,9 +30,6 @@ export async function GET(req: NextRequest) {
   for (const sport of activeSports) {
     console.log(`[HOT PICKS] Processing ${sport} from DB...`)
 
-    // ── Read eligible games from sports_events table ────────────────────────
-    // These were already fetched + stored by trigger-fetch / fetch-events cron.
-    // We filter to games that haven't started yet and have odds.
     const { data: dbGames, error: dbError } = await supabaseAdmin
       .from('sports_events')
       .select(`
@@ -73,24 +57,24 @@ export async function GET(req: NextRequest) {
     }
 
     if (!dbGames || dbGames.length === 0) {
-      console.log(`[HOT PICKS] No upcoming ${sport} games in DB with odds`)
+      console.log(`[HOT PICKS] No upcoming ${sport} games in DB`)
       continue
     }
 
-    // Filter to games that actually have spread + total in odds_data
+    // FIX: eligibility now requires total OR moneyline_home — NOT spread_home.
+    // spread_home is null on all stored games; total and moneyline are always set.
     const eligibleGames = dbGames.filter(g => {
-      const o = g.odds_data
-      if (!o) return false
-      const odds = typeof o === 'string' ? JSON.parse(o) : o
-      return odds.spread_home !== null && odds.spread_home !== undefined
-          && odds.total       !== null && odds.total       !== undefined
+      if (!g.odds_data) return false
+      const o = typeof g.odds_data === 'string' ? JSON.parse(g.odds_data) : g.odds_data
+      return (o.total !== null && o.total !== undefined)
+          || (o.moneyline_home !== null && o.moneyline_home !== undefined)
     })
 
-    console.log(`[HOT PICKS] ${sport}: ${eligibleGames.length} eligible games (of ${dbGames.length} upcoming with odds)`)
+    console.log(`[HOT PICKS] ${sport}: ${eligibleGames.length} eligible of ${dbGames.length} upcoming`)
 
     for (const game of eligibleGames) {
       try {
-        const odds = typeof game.odds_data === 'string'
+        const o = typeof game.odds_data === 'string'
           ? JSON.parse(game.odds_data)
           : game.odds_data
 
@@ -101,13 +85,14 @@ export async function GET(req: NextRequest) {
           home_team_sr_id: game.home_team_sr_id ?? '',
           away_team_sr_id: game.away_team_sr_id ?? '',
           sport:           game.sport_key,
-          spread_home:     odds.spread_home      ?? -3,
-          total:           odds.total            ?? 140,
-          odds_spread:     odds.spread_home_odds ?? -110,
-          odds_total:      odds.total_over_odds  ?? -110,
-          odds_ml_home:    odds.moneyline_home   ?? -150,
-          odds_ml_away:    odds.moneyline_away   ?? 130,
-          neutral_site:    game.neutral_site     ?? false,
+          // spread_home may be null — pass 0 as neutral default so sim still runs
+          spread_home:     o.spread_home      ?? 0,
+          total:           o.total            ?? 140,
+          odds_spread:     o.spread_home_odds ?? -110,
+          odds_total:      o.total_over_odds  ?? -110,
+          odds_ml_home:    o.moneyline_home   ?? -150,
+          odds_ml_away:    o.moneyline_away   ?? 130,
+          neutral_site:    game.neutral_site  ?? false,
           game_time:       game.commence_time,
           is_hot_pick:     true,
         })
@@ -131,13 +116,13 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // ── Select top picks ───────────────────────────────────────────────────────
+  // Primary: picks passing BET threshold sorted by edge score
   let qualifiedPicks = allResults
     .filter(r => r.recommendation === 'BET' && r.edge_up_score >= RECOMMENDATION_THRESHOLD.MIN_EDGE_SCORE)
     .sort((a, b) => b.edge_up_score - a.edge_up_score)
     .slice(0, 5)
 
-  // Fallback: surface top 3 by edge score if nothing clears threshold
+  // Fallback: top 3 by edge score if nothing clears threshold
   if (qualifiedPicks.length === 0 && allResults.length > 0) {
     console.log(`[HOT PICKS] No picks cleared threshold — using top-3 fallback`)
     qualifiedPicks = allResults
@@ -145,13 +130,14 @@ export async function GET(req: NextRequest) {
       .slice(0, 3)
   }
 
-  // ── Write to database ──────────────────────────────────────────────────────
   if (qualifiedPicks.length > 0) {
+    // Clear all existing daily picks
     await supabaseAdmin
       .from('ai_predictions')
       .update({ is_daily_pick: false, daily_pick_rank: null })
       .eq('is_daily_pick', true)
 
+    // Mark today's top picks
     for (let i = 0; i < qualifiedPicks.length; i++) {
       await supabaseAdmin
         .from('ai_predictions')
