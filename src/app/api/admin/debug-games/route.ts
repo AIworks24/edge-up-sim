@@ -1,9 +1,5 @@
 // src/app/api/admin/debug-games/route.ts
-//
-// TEMPORARY DIAGNOSTIC — delete after debugging hot picks.
-// Shows exactly what's in sports_events so we can see why
-// generate-hot-picks is getting 0 games from the DB query.
-// ─────────────────────────────────────────────────────────────────────────────
+// UPDATED - dumps raw odds_data and finds rows with actual spread values
 
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/database/supabase-admin'
@@ -16,84 +12,82 @@ export async function GET(req: NextRequest) {
 
   const now = new Date().toISOString()
 
-  // 1. All distinct sport_keys in the table
-  const { data: sportKeys } = await supabaseAdmin
-    .from('sports_events')
-    .select('sport_key')
-    .limit(200)
-
-  const uniqueSportKeys = [...new Set((sportKeys || []).map((r: any) => r.sport_key))]
-
-  // 2. Total row count
+  // 1. Total rows and sport key breakdown
   const { count: totalCount } = await supabaseAdmin
     .from('sports_events')
     .select('*', { count: 'exact', head: true })
 
-  // 3. How many have commence_time > now
-  const { count: futureCount } = await supabaseAdmin
+  const { data: sportKeys } = await supabaseAdmin
     .from('sports_events')
-    .select('*', { count: 'exact', head: true })
-    .gt('commence_time', now)
+    .select('sport_key')
+    .limit(500)
+  const uniqueSportKeys = [...new Set((sportKeys || []).map((r: any) => r.sport_key))]
 
-  // 4. How many are sport_key = 'ncaab'
-  const { count: ncaabCount } = await supabaseAdmin
-    .from('sports_events')
-    .select('*', { count: 'exact', head: true })
-    .eq('sport_key', 'ncaab')
-
-  // 5. How many are ncaab AND future
+  // 2. Future ncaab rows
   const { count: ncaabFutureCount } = await supabaseAdmin
     .from('sports_events')
     .select('*', { count: 'exact', head: true })
     .eq('sport_key', 'ncaab')
     .gt('commence_time', now)
 
-  // 6. How many are ncaab AND future AND have odds_data
-  const { count: eligibleCount } = await supabaseAdmin
+  // 3. Raw odds_data from 3 future ncaab games — show the full object
+  const { data: rawSample } = await supabaseAdmin
     .from('sports_events')
-    .select('*', { count: 'exact', head: true })
+    .select('home_team, away_team, commence_time, odds_data, sport_key')
     .eq('sport_key', 'ncaab')
     .gt('commence_time', now)
-    .not('odds_data', 'is', null)
+    .limit(3)
 
-  // 7. Sample of 5 most recent rows — show commence_time and sport_key
-  const { data: sample } = await supabaseAdmin
+  // 4. Check trigger-fetch stored rows — look for basketball_ncaab sport_key
+  const { data: altKeySample } = await supabaseAdmin
     .from('sports_events')
-    .select('id, sport_key, home_team, away_team, commence_time, odds_data')
-    .order('commence_time', { ascending: false })
-    .limit(5)
-
-  // 8. Sample of 5 future ncaab rows (if any)
-  const { data: futureSample } = await supabaseAdmin
-    .from('sports_events')
-    .select('id, sport_key, home_team, away_team, commence_time, odds_data')
-    .eq('sport_key', 'ncaab')
+    .select('home_team, away_team, commence_time, odds_data, sport_key')
+    .eq('sport_key', 'basketball_ncaab')
     .gt('commence_time', now)
-    .limit(5)
+    .limit(3)
+
+  // 5. Any rows at all where odds_data has a non-null spread_home at top level
+  const { data: allFuture } = await supabaseAdmin
+    .from('sports_events')
+    .select('home_team, sport_key, commence_time, odds_data')
+    .gt('commence_time', now)
+    .limit(10)
+
+  const withRealSpread = (allFuture || []).filter((g: any) => {
+    try {
+      const o = typeof g.odds_data === 'string' ? JSON.parse(g.odds_data) : g.odds_data
+      return o && o.spread_home !== null && o.spread_home !== undefined
+    } catch { return false }
+  })
 
   return NextResponse.json({
     server_now:        now,
     total_rows:        totalCount,
-    future_rows:       futureCount,
-    ncaab_rows:        ncaabCount,
-    ncaab_future_rows: ncaabFutureCount,
-    ncaab_future_with_odds: eligibleCount,
     unique_sport_keys: uniqueSportKeys,
-    most_recent_5:     (sample || []).map((g: any) => ({
+    ncaab_future_rows: ncaabFutureCount,
+
+    // Full raw odds_data objects — this shows what's actually stored
+    raw_odds_sample: (rawSample || []).map((g: any) => ({
       sport_key:    g.sport_key,
       home_team:    g.home_team,
-      away_team:    g.away_team,
       commence_time: g.commence_time,
-      has_odds:     !!g.odds_data,
-      odds_spread:  (typeof g.odds_data === 'string' ? JSON.parse(g.odds_data) : g.odds_data)?.spread_home ?? null,
+      odds_data_raw: g.odds_data,  // full dump, no parsing
     })),
-    future_ncaab_5: (futureSample || []).map((g: any) => ({
+
+    // basketball_ncaab key sample (from trigger-fetch path)
+    alt_key_sample: (altKeySample || []).map((g: any) => ({
       sport_key:    g.sport_key,
       home_team:    g.home_team,
-      away_team:    g.away_team,
       commence_time: g.commence_time,
-      has_odds:     !!g.odds_data,
-      odds_spread:  (typeof g.odds_data === 'string' ? JSON.parse(g.odds_data) : g.odds_data)?.spread_home ?? null,
+      odds_data_raw: g.odds_data,
+    })),
+
+    // How many future games actually have a real spread value
+    future_with_real_spread_count: withRealSpread.length,
+    future_with_real_spread_sample: withRealSpread.slice(0, 3).map((g: any) => ({
+      sport_key:  g.sport_key,
+      home_team:  g.home_team,
+      odds_data:  g.odds_data,
     })),
   })
 }
