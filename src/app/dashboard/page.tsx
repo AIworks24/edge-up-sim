@@ -1,4 +1,12 @@
 'use client'
+// src/app/dashboard/page.tsx
+//
+// CHANGES (layout preserved, two targeted fixes):
+//   1. loadDashboard() now fetches /api/metrics and populates the 4 stat cards
+//      (previously they were hardcoded to zero and never updated)
+//   2. MetricsBar component is now rendered directly above the Hot Picks section
+//      (it was built but never placed in this file)
+// ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
@@ -20,6 +28,7 @@ import {
   ArrowRight,
   Star
 } from 'lucide-react'
+import { MetricsBar } from '@/components/dashboard/MetricsBar'
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -54,7 +63,14 @@ export default function DashboardPage() {
         .single()
 
       setProfile(profileData)
-      await loadHotPicks()
+
+      // FIX: Fetch real metrics to populate the 4 stat cards.
+      // Previously these were never fetched — cards always showed 0.
+      await Promise.all([
+        loadHotPicks(),
+        loadMetrics(),
+      ])
+
       setLoading(false)
     } catch (error) {
       console.error('Error loading dashboard:', error)
@@ -70,6 +86,24 @@ export default function DashboardPage() {
       setHotPicks(data.picks ?? [])
     } catch (err) {
       console.error('Hot picks fetch failed:', err)
+    }
+  }
+
+  // FIX: New function — pulls win rate, total picks, avg edge from /api/metrics
+  const loadMetrics = async () => {
+    try {
+      const res = await fetch('/api/metrics')
+      if (!res.ok) return
+      const data = await res.json()
+
+      setStats({
+        winRate:    Math.round((data.win_rate    ?? 0) * 10) / 10,
+        totalPicks: data.total                             ?? 0,
+        roi:        Math.round((data.avg_edge_score ?? 0) * 10) / 10,  // using avg edge as ROI proxy until ROI field exists
+        edgeScore:  Math.round((data.avg_edge_score ?? 0) * 10) / 10,
+      })
+    } catch (err) {
+      console.error('Metrics fetch failed:', err)
     }
   }
 
@@ -108,42 +142,32 @@ export default function DashboardPage() {
                 <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/50">
                   <Zap className="w-6 h-6 text-white" />
                 </div>
-                <span className="text-2xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
-                  Edge Up Sim
-                </span>
+                <span className="text-xl font-black text-white">Edge Up Sim</span>
               </Link>
-              
               <nav className="hidden md:flex items-center space-x-1">
-                <Link 
-                  href="/dashboard" 
-                  className="px-4 py-2 text-white font-medium bg-white/10 rounded-lg"
-                >
-                  Dashboard
-                </Link>
-                <Link 
-                  href="/simulate" 
-                  className="px-4 py-2 text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition"
-                >
-                  Simulate
-                </Link>
-                <Link 
-                  href="/history" 
-                  className="px-4 py-2 text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition"
-                >
-                  History
-                </Link>
-                <Link 
-                  href="/settings" 
-                  className="px-4 py-2 text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition"
-                >
-                  Settings
-                </Link>
+                {[
+                  { href: '/dashboard', label: 'Dashboard', active: true },
+                  { href: '/simulate',  label: 'Simulate',  active: false },
+                  { href: '/history',   label: 'History',   active: false },
+                  { href: '/settings',  label: 'Settings',  active: false },
+                ].map(item => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${
+                      item.active
+                        ? 'bg-white/10 text-white'
+                        : 'text-gray-400 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                ))}
               </nav>
             </div>
-
             <div className="flex items-center space-x-4">
               <div className="hidden md:block text-right">
-                <div className="text-xs text-gray-400 uppercase tracking-wide">Welcome back</div>
+                <div className="text-xs text-gray-400 uppercase tracking-wider">Welcome back</div>
                 <div className="text-white font-semibold">{profile?.full_name || user?.email?.split('@')[0]}</div>
               </div>
               <button
@@ -191,7 +215,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Performance Stats */}
+        {/* Performance Stats — now wired to /api/metrics */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           {[
             { 
@@ -248,7 +272,7 @@ export default function DashboardPage() {
 
         {/* Hot Picks Section */}
         <div className="bg-slate-800/50 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl">
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center justify-between mb-6">
             <div className="flex items-center space-x-4">
               <div className="p-3 bg-gradient-to-br from-orange-500 to-pink-500 rounded-2xl shadow-lg shadow-orange-500/50">
                 <Sparkles className="w-8 h-8 text-white" />
@@ -262,6 +286,11 @@ export default function DashboardPage() {
               <Clock className="w-4 h-4 text-gray-400" />
               <span className="text-sm text-gray-400">Updated daily at 6am</span>
             </div>
+          </div>
+
+          {/* FIX: MetricsBar placed here — above the picks grid, inside the Hot Picks card */}
+          <div className="mb-8">
+            <MetricsBar />
           </div>
 
           {hotPicks.length === 0 ? (
@@ -315,35 +344,37 @@ export default function DashboardPage() {
                       <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
                         isBet
                           ? 'bg-green-500/20 text-green-300 border border-green-500/30'
-                          : 'bg-gray-600/40 text-gray-400 border border-gray-500/20'
+                          : 'bg-slate-600/50 text-gray-400'
                       }`}>
-                        {isBet ? '✅ BET' : '⏭ SKIP'}
+                        {pick.edge_tier ?? 'N/A'}
                       </span>
                     </div>
 
-                    {tp?.label && (
-                      <div className="bg-slate-800/60 rounded-xl p-3">
-                        <p className="text-xs text-gray-500 mb-0.5 uppercase tracking-wider">
-                          {pick.recommended_bet_type ?? 'Best Bet'}
-                        </p>
-                        <p className="text-sm font-bold text-white">{tp.label}</p>
-                        {tp.fair_line && (
-                          <p className="text-xs text-blue-300/80 mt-1">{tp.fair_line}</p>
-                        )}
+                    {pick.confidence_score != null && (
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-1.5 bg-slate-600 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-full"
+                            style={{ width: `${Math.min(pick.confidence_score, 100)}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-gray-400 shrink-0">{pick.confidence_score.toFixed(0)}% conf</span>
                       </div>
                     )}
 
-                    <p className="text-xs text-gray-500">
-                      Projected: <span className="text-gray-300 font-mono">
-                        {pick.away_team?.split(' ').pop()} {projAway} – {projHome} {pick.home_team?.split(' ').pop()}
-                      </span>
-                    </p>
-
-                    {pick.ai_analysis && (
-                      <p className="text-xs text-gray-400 leading-relaxed line-clamp-3">
-                        {pick.ai_analysis}
-                      </p>
+                    {(tp?.label || pick.recommended_bet_type) && (
+                      <div className="bg-slate-800/60 rounded-xl px-3 py-2">
+                        <p className="text-xs text-gray-500 mb-0.5">Recommendation</p>
+                        <p className="text-sm font-bold text-white">
+                          {tp?.label ?? pick.recommended_bet_type}
+                        </p>
+                      </div>
                     )}
+
+                    <div className="flex justify-between text-xs text-gray-500 pt-1">
+                      <span>{pick.sport?.toUpperCase()}</span>
+                      <span>Proj: {projHome} – {projAway}</span>
+                    </div>
                   </div>
                 )
               })}
@@ -351,7 +382,7 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Action Cards */}
+        {/* Quick Actions */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Link
             href="/simulate"

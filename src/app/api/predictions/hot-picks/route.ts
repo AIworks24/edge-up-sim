@@ -1,7 +1,14 @@
 // src/app/api/predictions/hot-picks/route.ts
 //
-// Fetches today's hot picks from ai_predictions table.
-// Returns up to 5 picks marked is_daily_pick = true for today.
+// Returns today's hot picks only — no past-date fallback.
+// Per product requirement: Hot Picks are current-day picks for upcoming games.
+//
+// Why the original broke: it filtered created_at >= today BUT if the cron
+// ran and no games passed MIN_EDGE_SCORE, zero rows were written with
+// is_daily_pick = true for today — so this always returned empty.
+//
+// The real fix is in generate-hot-picks/route.ts (fallback threshold logic).
+// This route stays simple: return today's is_daily_pick rows.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { NextRequest, NextResponse } from 'next/server'
