@@ -1,9 +1,10 @@
 // src/app/api/cron/generate-hot-picks/route.ts
 //
-// FIXES vs original guide:
-//   1. Table: ai_predictions (NOT predictions — that table doesn't exist)
-//   2. Filter uses is_daily_pick column (added by migration to ai_predictions)
-//   3. auth check on CRON_SECRET header
+// FIXES:
+//   1. Removed sim.bet_side — SimulationOutput no longer has that field
+//   2. Uses sim.top_pick.label for best bet description
+//   3. Uses sim.top_pick.bet_category for bet type
+//   4. Table: ai_predictions (correct)
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -77,7 +78,10 @@ export async function GET(req: NextRequest) {
           edge_up_score:  sim.edge_up_score,
           edge_tier:      sim.edge_tier,
           recommendation: sim.recommendation,
-          bet_side:       sim.bet_side,
+          // FIX: top_pick.label replaces the removed bet_side field
+          top_pick_label:    sim.top_pick?.label    ?? 'N/A',
+          top_pick_category: sim.top_pick?.bet_category ?? 'spread',
+          top_pick_edge:     sim.top_pick?.edge_pct  ?? 0,
         })
 
         await new Promise(r => setTimeout(r, 1100))  // SR rate limit
@@ -93,13 +97,13 @@ export async function GET(req: NextRequest) {
     .sort((a, b) => b.edge_up_score - a.edge_up_score)
     .slice(0, 5)
 
-  // Mark picks in ai_predictions table (FIX: not predictions)
+  // Mark picks in ai_predictions table
   if (qualifiedPicks.length > 0) {
     const today = new Date().toISOString().split('T')[0]
 
     // Clear today's existing picks
     await supabaseAdmin
-      .from('ai_predictions')    // ← FIX: your actual table name
+      .from('ai_predictions')
       .update({ is_daily_pick: false, daily_pick_rank: null })
       .eq('is_daily_pick', true)
       .gte('created_at', `${today}T00:00:00.000Z`)
