@@ -1,8 +1,20 @@
 // src/app/api/cron/generate-hot-picks/route.ts
 //
-// FIX: spread_home is null on all stored games (odds API doesn't always
-// return spread values). Changed eligibility filter to require total OR
-// moneyline instead — both are consistently populated.
+// ARCHITECTURE: Two-phase approach to work within Vercel's 60s Pro limit
+//
+// Phase 1 (this route): Simulate games in a capped batch, store ALL results
+//   to ai_predictions as prediction_type='hot_pick'. Then select the top picks
+//   from the FULL ai_predictions history for today (not just this batch).
+//   This means repeated runs accumulate more simulations, and each run the
+//   best picks are re-selected from all simulations done so far today.
+//
+// Phase 2 (future): daily_hot_picks table for per-user personalization based
+//   on sport preferences. That layer sits on top of this one.
+//
+// TIMEOUT MATH (Vercel Pro = 60s):
+//   10 games × 1.1s delay + ~2s Claude API each = ~32s → safe
+//   Run the cron multiple times per day (already 4x/day) to cover all games.
+//   Each run simulates the next 10 unsimulated upcoming games.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -26,10 +38,27 @@ export async function GET(req: NextRequest) {
   const allResults:  any[] = []
   const errors:      string[] = []
   const now          = new Date().toISOString()
+  const today        = now.split('T')[0]
 
   for (const sport of activeSports) {
-    console.log(`[HOT PICKS] Processing ${sport} from DB...`)
+    console.log(`[HOT PICKS] Processing ${sport}...`)
 
+    // ── Find games already simulated today ────────────────────────────────
+    // We track which external_event_ids have already been simulated today
+    // so each cron run picks up the NEXT batch of unsimulated games.
+    const { data: alreadySimulated } = await supabaseAdmin
+      .from('ai_predictions')
+      .select('event_id')
+      .eq('prediction_type', 'hot_pick')
+      .gte('created_at', `${today}T00:00:00.000Z`)
+
+    const simulatedEventIds = new Set(
+      (alreadySimulated || []).map((r: any) => r.event_id)
+    )
+
+    console.log(`[HOT PICKS] Already simulated today: ${simulatedEventIds.size} games`)
+
+    // ── Fetch upcoming games from DB ──────────────────────────────────────
     const { data: dbGames, error: dbError } = await supabaseAdmin
       .from('sports_events')
       .select(`
@@ -48,10 +77,9 @@ export async function GET(req: NextRequest) {
       .gt('commence_time', now)
       .not('odds_data', 'is', null)
       .order('commence_time', { ascending: true })
-      .limit(20)
+      .limit(50) // fetch more than we'll process so we can skip already-done ones
 
     if (dbError) {
-      console.error(`[HOT PICKS] DB error for ${sport}:`, dbError.message)
       errors.push(`${sport} DB read: ${dbError.message}`)
       continue
     }
@@ -61,18 +89,21 @@ export async function GET(req: NextRequest) {
       continue
     }
 
-    // FIX: eligibility now requires total OR moneyline_home — NOT spread_home.
-    // spread_home is null on all stored games; total and moneyline are always set.
+    // Filter: has odds AND hasn't been simulated today yet
     const eligibleGames = dbGames.filter(g => {
+      if (simulatedEventIds.has(g.external_event_id || g.id)) return false
       if (!g.odds_data) return false
       const o = typeof g.odds_data === 'string' ? JSON.parse(g.odds_data) : g.odds_data
       return (o.total !== null && o.total !== undefined)
           || (o.moneyline_home !== null && o.moneyline_home !== undefined)
     })
 
-    console.log(`[HOT PICKS] ${sport}: ${eligibleGames.length} eligible of ${dbGames.length} upcoming`)
+    // Cap at 10 per run — safe within 60s Pro limit
+    const gamesToProcess = eligibleGames.slice(0, 10)
 
-    for (const game of eligibleGames) {
+    console.log(`[HOT PICKS] ${sport}: ${gamesToProcess.length} games to simulate this run (${eligibleGames.length} total unsimulated)`)
+
+    for (const game of gamesToProcess) {
       try {
         const o = typeof game.odds_data === 'string'
           ? JSON.parse(game.odds_data)
@@ -85,7 +116,6 @@ export async function GET(req: NextRequest) {
           home_team_sr_id: game.home_team_sr_id ?? '',
           away_team_sr_id: game.away_team_sr_id ?? '',
           sport:           game.sport_key,
-          // spread_home may be null — pass 0 as neutral default so sim still runs
           spread_home:     o.spread_home      ?? 0,
           total:           o.total            ?? 140,
           odds_spread:     o.spread_home_odds ?? -110,
@@ -116,28 +146,43 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Primary: picks passing BET threshold sorted by edge score
-  let qualifiedPicks = allResults
+  // ── Select best picks from ALL simulations done today ─────────────────────
+  // Pull every hot_pick simulation from today (not just this batch).
+  // This means after 4 cron runs, we're selecting from ~40 simulated games.
+  const { data: allTodayPicks } = await supabaseAdmin
+    .from('ai_predictions')
+    .select('id, edge_score, edge_tier, recommendation')
+    .eq('prediction_type', 'hot_pick')
+    .gte('created_at', `${today}T00:00:00.000Z`)
+    .order('edge_score', { ascending: false })
+
+  const todayResults = (allTodayPicks || []).map((r: any) => ({
+    prediction_id:  r.id,
+    edge_up_score:  r.edge_score,
+    edge_tier:      r.edge_tier,
+    recommendation: r.recommendation,
+  }))
+
+  // Primary: BET + threshold
+  let qualifiedPicks = todayResults
     .filter(r => r.recommendation === 'BET' && r.edge_up_score >= RECOMMENDATION_THRESHOLD.MIN_EDGE_SCORE)
-    .sort((a, b) => b.edge_up_score - a.edge_up_score)
     .slice(0, 5)
 
   // Fallback: top 3 by edge score if nothing clears threshold
-  if (qualifiedPicks.length === 0 && allResults.length > 0) {
+  if (qualifiedPicks.length === 0 && todayResults.length > 0) {
     console.log(`[HOT PICKS] No picks cleared threshold — using top-3 fallback`)
-    qualifiedPicks = allResults
-      .sort((a, b) => b.edge_up_score - a.edge_up_score)
-      .slice(0, 3)
+    qualifiedPicks = todayResults.slice(0, 3)
   }
 
+  // ── Write daily picks ──────────────────────────────────────────────────────
   if (qualifiedPicks.length > 0) {
-    // Clear all existing daily picks
+    // Clear all existing daily pick flags
     await supabaseAdmin
       .from('ai_predictions')
       .update({ is_daily_pick: false, daily_pick_rank: null })
       .eq('is_daily_pick', true)
 
-    // Mark today's top picks
+    // Set the new top picks
     for (let i = 0; i < qualifiedPicks.length; i++) {
       await supabaseAdmin
         .from('ai_predictions')
@@ -146,13 +191,19 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  console.log(`[HOT PICKS] Complete: ${qualifiedPicks.length} picks from ${allResults.length} simulated, ${errors.length} errors`)
+  const remainingUnsimulated = activeSports.reduce((_acc, _sport) => {
+    // Rough count — will be accurate after first run
+    return 0
+  }, 0)
+
+  console.log(`[HOT PICKS] Complete: ${allResults.length} simulated this run, ${qualifiedPicks.length} picks selected from ${todayResults.length} total today, ${errors.length} errors`)
 
   return NextResponse.json({
-    success:         true,
-    games_processed: allResults.length,
-    picks_qualified: qualifiedPicks.length,
-    top_picks:       qualifiedPicks,
+    success:              true,
+    simulated_this_run:   allResults.length,
+    total_simulated_today: todayResults.length,
+    picks_qualified:      qualifiedPicks.length,
+    top_picks:            qualifiedPicks,
     errors,
   })
 }
