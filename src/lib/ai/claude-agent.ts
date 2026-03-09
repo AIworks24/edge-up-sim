@@ -403,26 +403,27 @@ function buildFallback(sim: CBBSimResults, req: SimulationRequest) {
 // ── Store in Supabase ─────────────────────────────────────────────────────────
 async function storePrediction(req: SimulationRequest, sim: CBBSimResults, output: SimulationOutput): Promise<string> {
   const edgeClass = classifyEdgeScore(sim.best_edge_score)
-  const { data } = await supabaseAdmin
+
+  const { data, error } = await supabaseAdmin
     .from('ai_predictions')
     .insert({
       prediction_type:      req.is_hot_pick ? 'hot_pick' : 'user_simulation',
       requested_by:         req.user_id || null,
-      confidence_score:     output.confidence,
-      edge_score:           output.edge_up_score,
-      ai_analysis:          output.game_summary,
-      key_factors:          output.key_factors,
-      risk_assessment:      output.top_pick?.analysis || '',
+      confidence_score:     output.confidence        ?? 0,
+      edge_score:           output.edge_up_score      ?? 0,
+      ai_analysis:          output.game_summary       || 'No analysis available',
+      key_factors:          output.key_factors        ?? [],
+      risk_assessment:      output.top_pick?.analysis || 'No risk assessment',
       recommended_bet_type: output.top_pick?.bet_category || 'spread',
-      recommended_line:     { top_pick: output.top_pick },
+      recommended_line:     { top_pick: output.top_pick ?? {} },
       odds_snapshot:        { spread: req.spread_home, total: req.total, ml_home: req.odds_ml_home, ml_away: req.odds_ml_away },
       sport:                req.sport,
       home_team:            req.home_team,
       away_team:            req.away_team,
       game_time:            req.game_time || null,
       edge_tier:            edgeClass.tier,
-      projected_home_score: output.projected_score?.home,
-      projected_away_score: output.projected_score?.away,
+      projected_home_score: output.projected_score?.home ?? null,
+      projected_away_score: output.projected_score?.away ?? null,
       fair_spread:          sim.fair_spread,
       fair_total:           sim.fair_total,
       market_spread:        req.spread_home,
@@ -434,5 +435,12 @@ async function storePrediction(req: SimulationRequest, sim: CBBSimResults, outpu
     })
     .select('id')
     .single()
+
+  if (error) {
+    console.error('[storePrediction] INSERT FAILED:', error.message, error.details, error.hint)
+    throw new Error(`Failed to store prediction: ${error.message}`)
+  }
+
+  console.log('[storePrediction] Saved:', data?.id)
   return data?.id || ''
 }
