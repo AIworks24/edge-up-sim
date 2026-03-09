@@ -315,8 +315,9 @@ export default function DashboardPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {hotPicks.map((pick: any, index: number) => {
-                const tp = pick.recommended_line?.top_pick
-                const isBet = pick.edge_score >= 20
+                const fr = pick.full_response
+                const tp = fr?.top_pick ?? pick.recommended_line?.top_pick
+                const isBet = (fr?.recommendation === 'BET') || pick.edge_score >= 20
                 const tierColors: Record<string, string> = {
                   EXCEPTIONAL: 'text-emerald-300',
                   STRONG:      'text-green-300',
@@ -362,15 +363,19 @@ export default function DashboardPage() {
                       </div>
                     )}
 
-                    {(tp?.label || pick.recommended_bet_type) && (
-                      <div className="bg-slate-800/60 rounded-xl px-3 py-2">
-                        <p className="text-xs text-gray-500 mb-0.5">Recommendation</p>
-                        <p className="text-sm font-bold text-white">
-                          {tp?.label ?? pick.recommended_bet_type}
-                        </p>
-                      </div>
-                    )}
-
+                   {(tp?.label || pick.recommended_bet_type) && (
+                                        <div className="bg-slate-800/60 rounded-xl px-3 py-2">
+                                          <p className="text-xs text-gray-500 mb-0.5">
+                                            {tp?.bet_category?.toUpperCase() ?? pick.recommended_bet_type?.toUpperCase() ?? 'Best Bet'}
+                                          </p>
+                                          <p className="text-sm font-bold text-white">
+                                            {tp?.verdict === 'BET' ? '✅ ' : tp?.verdict === 'LEAN' ? '⚡ ' : ''}{tp?.label ?? pick.recommended_bet_type}
+                                          </p>
+                                          {tp?.fair_line && (
+                                            <p className="text-xs text-blue-300/80 mt-1">{tp.fair_line}</p>
+                                          )}
+                                        </div>
+                                      )}
                     <div className="flex justify-between text-xs text-gray-500 pt-1">
                       <span>{pick.sport?.toUpperCase()}</span>
                       <span>Proj: {projHome} – {projAway}</span>

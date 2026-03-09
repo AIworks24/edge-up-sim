@@ -51,7 +51,9 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  // ── 2. Filter to games that haven't started yet ───────────────────────────
+  // ── 2. Filter to future games, then deduplicate by game ──────────────────
+  // Same game may have been simulated multiple times (different users/runs).
+  // Keep only the highest edge_score row per unique game matchup.
   const futureSims = todaySims.filter(s => {
     if (!s.game_time) return true
     return new Date(s.game_time) > new Date(now)
@@ -68,14 +70,28 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  // ── 3. Pick the best — top 5 by edge_score ───────────────────────────────
-  // edge_score >= 20 = strong picks (STRONG/EXCEPTIONAL tier)
-  // if none hit that bar, take top 3 regardless so dashboard is never empty
-  let topPicks = futureSims.filter(s => (s.edge_score ?? 0) >= 20).slice(0, 5)
+  // Deduplicate: for each unique home+away pair, keep the row with highest edge_score
+  const seenGames = new Map<string, typeof futureSims[0]>()
+  for (const sim of futureSims) {
+    const gameKey = `${sim.home_team}|${sim.away_team}`
+    const existing = seenGames.get(gameKey)
+    if (!existing || (sim.edge_score ?? 0) > (existing.edge_score ?? 0)) {
+      seenGames.set(gameKey, sim)
+    }
+  }
+  const uniqueSims = Array.from(seenGames.values())
+    .sort((a, b) => (b.edge_score ?? 0) - (a.edge_score ?? 0))
+
+  console.log(`[HOT PICKS] ${uniqueSims.length} unique games after dedup`)
+
+  // ── 3. Pick the best unique games ─────────────────────────────────────────
+  // STRONG/EXCEPTIONAL tier = edge_score >= 20
+  // Fallback to top 3 if nothing qualifies so dashboard is never empty
+  let topPicks = uniqueSims.filter(s => (s.edge_score ?? 0) >= 20).slice(0, 5)
 
   if (topPicks.length === 0) {
     console.log('[HOT PICKS] No picks with edge_score >= 20 — using top-3 fallback')
-    topPicks = futureSims.slice(0, 3)
+    topPicks = uniqueSims.slice(0, 3)
   }
 
   // ── 4. Clear all existing daily pick flags, set new ones ──────────────────

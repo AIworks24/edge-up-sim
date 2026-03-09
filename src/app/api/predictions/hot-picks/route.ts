@@ -23,7 +23,8 @@ export async function GET(req: NextRequest) {
         ai_analysis, market_spread, market_total,
         fair_spread, fair_total,
         sim_home_win_pct, sim_home_cover_pct, sim_over_pct,
-        daily_pick_rank, prediction_type, key_factors
+        daily_pick_rank, prediction_type, key_factors,
+        full_response
       `)
       .eq('is_daily_pick', true)
       .gte('created_at', `${today}T00:00:00.000Z`)
@@ -51,7 +52,8 @@ export async function GET(req: NextRequest) {
         ai_analysis, market_spread, market_total,
         fair_spread, fair_total,
         sim_home_win_pct, sim_home_cover_pct, sim_over_pct,
-        prediction_type, key_factors
+        prediction_type, key_factors,
+        full_response
       `)
       .gte('created_at', `${today}T00:00:00.000Z`)
       .gt('game_time', new Date().toISOString())
