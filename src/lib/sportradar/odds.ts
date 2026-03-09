@@ -157,13 +157,15 @@ function parseFromConsensus(lines: any[]): ParsedOdds {
   const mlAway = mlCurrent?.outcomes?.find((o: any) => o.type === 'away')
 
   // Spread — home outcome spread is the home team's line (e.g. "16.5" = home +16.5)
+  // Spread — SR OC API uses "handicap" field (not "spread") on outcome objects
   const spdHome = spdCurrent?.outcomes?.find((o: any) => o.type === 'home')
   const spdAway = spdCurrent?.outcomes?.find((o: any) => o.type === 'away')
   // We store spread_home as the away team's spread (negative = away favoured)
   // Convention: spread_home = -3.5 means home is -3.5 (favourite)
   // In SR data: home spread "16.5" means home is +16.5 (dog), away spread "-16.5" means away -16.5 (fav)
   // So spread_home = home outcome spread value as float
-  const spreadHomeVal = toNum(spdHome?.spread)  // e.g. 16.5 or -3.5
+  // Try "handicap" first (SR OC API field name), fall back to "spread"
+  const spreadHomeVal = toNum(spdHome?.handicap ?? spdHome?.spread)
 
   // Total
   const totOver  = totCurrent?.outcomes?.find((o: any) => o.type === 'over')
@@ -209,7 +211,7 @@ function parseFromMarkets(markets: any[]): ParsedOdds {
   const totUndr = getOutcome(totMkt, 'under')
 
   return {
-    spread_home:      toNum(spdHome?.spread),
+    spread_home:      toNum(spdHome?.handicap ?? spdHome?.spread),
     spread_home_odds: toNum(spdHome?.odds),
     spread_away_odds: toNum(spdAway?.odds),
     total:            toNum(totOver?.total),
