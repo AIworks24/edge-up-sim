@@ -27,14 +27,17 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const now   = new Date().toISOString()
-  const today = now.split('T')[0]
+  const now = new Date()
+  const nowISO = now.toISOString()
 
-  // ── 1. Pull all simulations created today ─────────────────────────────────
+  // Look back 24 hours — avoids any timezone mismatch with a strict "today" filter
+  const since = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()
+
+  // ── 1. Pull all simulations from the last 24 hours ────────────────────────
   const { data: todaySims, error } = await supabaseAdmin
     .from('ai_predictions')
     .select('id, edge_score, edge_tier, game_time, home_team, away_team, sport, confidence_score, prediction_type')
-    .gte('created_at', `${today}T00:00:00.000Z`)
+    .gte('created_at', since)
     .not('edge_score', 'is', null)
     .order('edge_score', { ascending: false })
 
@@ -45,7 +48,7 @@ export async function GET(req: NextRequest) {
   if (!todaySims || todaySims.length === 0) {
     return NextResponse.json({
       success: true,
-      message: 'No simulations stored today yet.',
+      message: `No simulations found in the last 24 hours (since ${since}). Run a simulation first.`,
       picks_selected: 0,
       top_picks: [],
     })
@@ -56,7 +59,7 @@ export async function GET(req: NextRequest) {
   // Keep only the highest edge_score row per unique game matchup.
   const futureSims = todaySims.filter(s => {
     if (!s.game_time) return true
-    return new Date(s.game_time) > new Date(now)
+    return new Date(s.game_time) > new Date(nowISO)
   })
 
   console.log(`[HOT PICKS] ${todaySims.length} total sims today, ${futureSims.length} for future games`)
