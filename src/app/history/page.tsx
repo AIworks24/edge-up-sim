@@ -69,7 +69,7 @@ function SimCard({ pred }: { pred: any }) {
           <span className="text-xs text-gray-500">{fmtDate(pred.created_at)}</span>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           {/* Outcome */}
           {pred.was_correct === true  && <CheckCircle2 className="w-4 h-4 text-green-400" />}
           {pred.was_correct === false && <XCircle      className="w-4 h-4 text-red-400"   />}
@@ -82,7 +82,8 @@ function SimCard({ pred }: { pred: any }) {
             {pred.edge_score?.toFixed(1)}%
           </span>
 
-          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${edgeBadge(pred.edge_tier)}`}>
+          {/* Hide edge tier badge on smallest phones, show on sm+ */}
+          <span className={`hidden sm:inline text-xs font-bold px-2 py-0.5 rounded-full ${edgeBadge(pred.edge_tier)}`}>
             {pred.edge_tier}
           </span>
 
@@ -92,7 +93,7 @@ function SimCard({ pred }: { pred: any }) {
 
       {/* Expanded detail */}
       {open && (
-        <div className="px-6 pb-6 border-t border-white/5 pt-4 space-y-4">
+        <div className="px-4 sm:px-6 pb-6 border-t border-white/5 pt-4 space-y-4">
 
           {/* Top pick recommendation */}
           {tp && (
@@ -109,7 +110,7 @@ function SimCard({ pred }: { pred: any }) {
           )}
 
           {/* Projected score + sim stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             {pred.projected_away_score != null && (
               <div className="bg-slate-700/30 rounded-xl p-3 text-center">
                 <p className="text-xs text-gray-500 mb-1">{pred.away_team?.split(' ').pop()}</p>
@@ -268,12 +269,12 @@ export default function HistoryPage() {
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-6 py-8 space-y-8">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-8">
 
         {/* Stats row */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {statCards.map(s => (
-            <div key={s.label} className="bg-slate-800/60 border border-white/5 rounded-2xl p-4 text-center">
+            <div key={s.label} className="bg-slate-800/60 border border-white/5 rounded-2xl p-3 sm:p-4 text-center">
               <s.icon className={`w-5 h-5 ${s.color} mx-auto mb-2`} />
               <p className="text-2xl font-black text-white">{s.value}</p>
               <p className="text-xs text-gray-500 mt-1">{s.label}</p>

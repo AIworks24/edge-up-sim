@@ -260,14 +260,14 @@ export default function SettingsPage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           {/* Sidebar Nav */}
           <div className="md:col-span-1">
-            <nav className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
+            <nav className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden flex md:flex-col overflow-x-auto">
               {tabs.map(tab => {
                 const Icon = tab.icon
                 return (
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`w-full flex items-center gap-3 px-4 py-3.5 text-sm font-medium transition ${
+                    className={`flex-shrink-0 md:flex-shrink flex items-center gap-3 px-3 md:px-4 py-3 md:py-3.5 text-sm font-medium transition ${
                       activeTab === tab.id
                         ? 'bg-blue-600/20 text-blue-400 border-l-2 border-blue-500'
                         : 'text-gray-400 hover:text-white hover:bg-white/5'

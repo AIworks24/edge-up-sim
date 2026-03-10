@@ -163,7 +163,7 @@ export default function DashboardPage() {
                     {item.label}
                   </Link>
                 ))}
-              </nav>
+             </nav>
             </div>
             <div className="flex items-center space-x-4">
               <div className="hidden md:block text-right">
@@ -178,13 +178,32 @@ export default function DashboardPage() {
               </button>
             </div>
           </div>
+          {/* Mobile bottom nav bar */}
+          <div className="md:hidden border-t border-white/10 flex">
+            {[
+              { href: '/dashboard', label: 'Dashboard', active: true  },
+              { href: '/simulate',  label: 'Simulate',  active: false },
+              { href: '/history',   label: 'History',   active: false },
+              { href: '/settings',  label: 'Settings',  active: false },
+            ].map(item => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex-1 py-2 text-center text-xs font-medium transition ${
+                  item.active ? 'text-white bg-white/10' : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
 
         {/* Hero Tier Card */}
-        <div className={`relative overflow-hidden bg-gradient-to-r ${currentTier.color} rounded-3xl p-8 shadow-2xl`}>
+        <div className={`relative overflow-hidden bg-gradient-to-r ${currentTier.color} rounded-3xl p-5 sm:p-8 shadow-2xl`}>
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-32 -mt-32"></div>
           <div className="relative z-10 flex flex-col md:flex-row items-center justify-between">
             <div className="mb-6 md:mb-0">
@@ -216,7 +235,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Performance Stats — now wired to /api/metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
           {[
             { 
               icon: TrendingUp, 
@@ -271,7 +290,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Hot Picks Section */}
-        <div className="bg-slate-800/50 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl">
+        <div className="bg-slate-800/50 backdrop-blur-xl border border-white/10 rounded-3xl p-5 sm:p-8 shadow-2xl">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center space-x-4">
               <div className="p-3 bg-gradient-to-br from-orange-500 to-pink-500 rounded-2xl shadow-lg shadow-orange-500/50">
@@ -391,7 +410,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Link
             href="/simulate"
-            className="group relative overflow-hidden bg-gradient-to-br from-blue-600 via-blue-700 to-blue-800 hover:from-blue-500 hover:via-blue-600 hover:to-blue-700 rounded-2xl p-8 text-white transition shadow-2xl shadow-blue-500/50"
+            className="group relative overflow-hidden bg-gradient-to-br from-blue-600 via-blue-700 to-blue-800 hover:from-blue-500 hover:via-blue-600 hover:to-blue-700 rounded-2xl p-5 sm:p-8 text-white transition shadow-2xl shadow-blue-500/50"
           >
             <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-16 -mt-16 group-hover:bg-white/20 transition"></div>
             <div className="relative z-10">

@@ -472,25 +472,29 @@ export default function SimulatePage() {
                             className={`w-full p-4 rounded-xl border-2 transition text-left ${
                               isSel ? 'border-blue-500 bg-blue-500/10' : 'border-white/10 bg-white/5 hover:border-white/20'
                             }`}>
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="flex-1 min-w-0">
-                                <div className="text-white font-semibold truncate">
-                                  {game.away_team} @ {game.home_team}
+                            <div className="flex flex-col gap-2">
+                              {/* Top row: team name + chevron */}
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-white font-semibold text-sm leading-tight">
+                                    {game.away_team} @ {game.home_team}
+                                  </div>
+                                  <div className="text-gray-400 text-xs mt-0.5">
+                                    {new Date(game.commence_time).toLocaleString([], {
+                                      weekday: 'short', month: 'short', day: 'numeric',
+                                      hour: '2-digit', minute: '2-digit',
+                                    })}
+                                  </div>
                                 </div>
-                                <div className="text-gray-400 text-xs mt-0.5">
-                                  {new Date(game.commence_time).toLocaleString([], {
-                                    weekday: 'short', month: 'short', day: 'numeric',
-                                    hour: '2-digit', minute: '2-digit',
-                                  })}
-                                </div>
+                                <ChevronDown className={`w-4 h-4 flex-shrink-0 transition ${isSel ? 'rotate-180 text-blue-400' : 'text-gray-400'}`} />
                               </div>
-                              <div className="flex items-center gap-2 flex-shrink-0 text-xs">
+                              {/* Bottom row: odds badges — wrap on mobile */}
+                              <div className="flex flex-wrap items-center gap-1.5 text-xs">
                                 {ml  && <span className="bg-white/10 rounded px-2 py-1 text-gray-300 whitespace-nowrap">ML {ml.home} / {ml.away}</span>}
                                 {sp  && <span className="bg-white/10 rounded px-2 py-1 text-gray-300 whitespace-nowrap">{sp.home}</span>}
                                 {tot && <span className="bg-white/10 rounded px-2 py-1 text-gray-300 whitespace-nowrap">{tot.over}</span>}
-                                {!ml && !sp && !tot && <span className="text-gray-500 italic">No odds yet</span>}
+                                {!ml && !sp && !tot && <span className="text-gray-500 italic text-xs">No odds yet</span>}
                               </div>
-                              <ChevronDown className={`w-4 h-4 flex-shrink-0 transition ${isSel ? 'rotate-180 text-blue-400' : 'text-gray-400'}`} />
                             </div>
                           </button>
                         )
@@ -514,18 +518,18 @@ export default function SimulatePage() {
                         </div>
 
                         {/* 3-bet badge strip */}
-                        <div className="grid grid-cols-3 gap-3">
+                        <div className="grid grid-cols-3 gap-2 sm:gap-3">
                           {[
                             { icon: 'S', label: 'Point Spread', sub: 'Fair spread vs market gap', cls: 'bg-purple-500/30 text-purple-300' },
                             { icon: 'T', label: 'Over / Under', sub: 'Fair total + pace impact',  cls: 'bg-teal-500/30 text-teal-300'   },
                             { icon: 'M', label: 'Moneyline',    sub: 'True win prob vs market ML', cls: 'bg-orange-500/30 text-orange-300'},
                           ].map(({ icon, label, sub, cls }) => (
-                            <div key={label} className="bg-white/5 rounded-xl p-3 border border-white/10 text-center">
-                              <div className={`w-7 h-7 rounded-lg mx-auto mb-2 text-xs flex items-center justify-center font-bold ${cls}`}>
+                            <div key={label} className="bg-white/5 rounded-xl p-2 sm:p-3 border border-white/10 text-center">
+                              <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-lg mx-auto mb-1.5 text-xs flex items-center justify-center font-bold ${cls}`}>
                                 {icon}
                               </div>
-                              <div className="text-gray-200 font-semibold text-sm">{label}</div>
-                              <div className="text-gray-500 text-xs mt-0.5">{sub}</div>
+                              <div className="text-gray-200 font-semibold text-xs">{label}</div>
+                              <div className="text-gray-500 text-xs mt-0.5 hidden sm:block">{sub}</div>
                             </div>
                           ))}
                         </div>
@@ -538,15 +542,15 @@ export default function SimulatePage() {
                         )}
 
                         <button onClick={runSimulation} disabled={simulating}
-                          className="w-full py-5 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 disabled:opacity-50 text-white rounded-2xl font-bold text-xl transition shadow-xl shadow-blue-500/30">
+                          className="w-full py-4 sm:py-5 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 disabled:opacity-50 text-white rounded-2xl font-bold text-lg sm:text-xl transition shadow-xl shadow-blue-500/30">
                           {simulating ? (
-                            <span className="flex items-center justify-center space-x-3">
-                              <Loader2 className="w-6 h-6 animate-spin" />
-                              <span>Analysing Spread, Total & Moneyline...</span>
+                            <span className="flex items-center justify-center space-x-2 sm:space-x-3">
+                              <Loader2 className="w-5 h-5 sm:w-6 sm:h-6 animate-spin" />
+                              <span className="text-sm sm:text-base">Analysing Spread, Total & Moneyline...</span>
                             </span>
                           ) : (
-                            <span className="flex items-center justify-center space-x-3">
-                              <Zap className="w-6 h-6" />
+                            <span className="flex items-center justify-center space-x-2 sm:space-x-3">
+                              <Zap className="w-5 h-5 sm:w-6 sm:h-6" />
                               <span>Run Full Analysis</span>
                             </span>
                           )}
