@@ -290,7 +290,8 @@ export function runCBBSimulation(input: CBBGameInput, params: CBBSimParams = CBB
   // Spread: both sides use same odds line (symmetric -110 / -110)
   // Total:  both sides use same total odds line
   // ML:     each side uses its own American odds
-  const awaySpreadLabel = `${input.away.name} +${Math.abs(input.spread_home)}`
+  const awaySpread = -(input.spread_home)
+  const awaySpreadLabel = `${input.away.name} ${awaySpread > 0 ? '+' : ''}${awaySpread}`
   const bets = {
     spread_home: buildBetEdge('spread_home', `${input.home.name} ${input.spread_home > 0 ? '+' : ''}${input.spread_home}`, homeCoverPct,      input.odds_spread),
     spread_away: buildBetEdge('spread_away', awaySpreadLabel,                                                                1 - homeCoverPct,  input.odds_spread),
