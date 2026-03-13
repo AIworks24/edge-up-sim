@@ -92,18 +92,24 @@ export default function DashboardPage() {
   // FIX: New function — pulls win rate, total picks, avg edge from /api/metrics
   const loadMetrics = async () => {
     try {
-      const res = await fetch('/api/metrics')
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+  
+      const res = await fetch('/api/metrics?scope=all', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
       if (!res.ok) return
+  
       const data = await res.json()
-
+  
       setStats({
-        winRate:    Math.round((data.win_rate    ?? 0) * 10) / 10,
-        totalPicks: data.total                             ?? 0,
-        roi:        Math.round((data.avg_edge_score ?? 0) * 10) / 10,  // using avg edge as ROI proxy until ROI field exists
-        edgeScore:  Math.round((data.avg_edge_score ?? 0) * 10) / 10,
+        winRate:    data.win_rate       ?? 0,   // % of resolved predictions that were correct
+        totalPicks: data.total          ?? 0,   // all predictions run (resolved + pending)
+        roi:        data.roi            ?? 0,   // theoretical ROI at -110 odds
+        edgeScore:  data.avg_edge_score ?? 0,   // mean edge score across all predictions
       })
     } catch (err) {
-      console.error('Metrics fetch failed:', err)
+      console.error('[dashboard] loadMetrics failed:', err)
     }
   }
 
@@ -240,8 +246,8 @@ export default function DashboardPage() {
             { 
               icon: TrendingUp, 
               label: 'Win Rate', 
-              value: `${stats.winRate}%`, 
-              subtitle: 'Last 30 days',
+              value: stats.winRate > 0 ? `${stats.winRate}%` : '—', 
+              subtitle: 'Resolved picks',
               color: 'from-green-500 to-emerald-500',
               bgColor: 'bg-green-500/10',
               iconColor: 'text-green-400'
@@ -258,8 +264,8 @@ export default function DashboardPage() {
             { 
               icon: DollarSign, 
               label: 'ROI', 
-              value: `+${stats.roi}%`, 
-              subtitle: 'Profit margin',
+              value: stats.roi !== 0 ? `${stats.roi > 0 ? '+' : ''}${stats.roi}%` : '—', 
+              subtitle: 'Theoretical at -110',
               color: 'from-purple-500 to-pink-500',
               bgColor: 'bg-purple-500/10',
               iconColor: 'text-purple-400'
@@ -267,7 +273,7 @@ export default function DashboardPage() {
             { 
               icon: Percent, 
               label: 'Avg Edge', 
-              value: `+${stats.edgeScore}%`, 
+              value: stats.edgeScore > 0 ? `+${stats.edgeScore}%` : '—', 
               subtitle: 'Expected value',
               color: 'from-amber-500 to-orange-500',
               bgColor: 'bg-amber-500/10',
