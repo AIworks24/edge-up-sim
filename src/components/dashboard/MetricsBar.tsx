@@ -46,7 +46,7 @@ export function MetricsBar() {
   if (loading) return <MetricsSkeleton />
 
   // Show placeholder until at least one pick is resolved
-  if (!metrics || metrics.resolved === 0) {
+  if (!metrics || metrics.total === 0) {
     return (
       <div className="bg-gray-900 border border-gray-700 rounded-xl p-4 text-center">
         <p className="text-gray-500 text-sm">
