@@ -92,21 +92,15 @@ export default function DashboardPage() {
   // FIX: New function — pulls win rate, total picks, avg edge from /api/metrics
   const loadMetrics = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const headers: Record<string, string> = {}
-      if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`
-      }
- 
-      const res = await fetch('/api/metrics?scope=all', { headers })
+      const res = await fetch('/api/metrics?scope=all')
       if (!res.ok) return
       const data = await res.json()
- 
+
       setStats({
-        winRate:    data.win_rate        ?? 0,
-        totalPicks: data.resolved        ?? 0,   // resolved picks, not total
-        roi:        data.roi             ?? 0,   // real ROI at -110
-        edgeScore:  data.avg_edge_score  ?? 0,
+        winRate:    data.win_rate       ?? 0,
+        totalPicks: data.resolved       ?? 0,
+        roi:        data.roi            ?? 0,
+        edgeScore:  data.avg_edge_score ?? 0,
       })
     } catch (err) {
       console.error('Metrics fetch failed:', err)

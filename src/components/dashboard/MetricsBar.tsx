@@ -4,7 +4,6 @@
 // Field names match the fixed api/metrics/route.ts response shape.
 
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/database/supabase-client'
 
 interface Metrics {
   total:          number
@@ -26,13 +25,7 @@ export function MetricsBar() {
 
   const loadMetrics = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const headers: Record<string, string> = {}
-      if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`
-      }
-
-      const res = await fetch('/api/metrics?scope=hot_picks&days=30', { headers })
+      const res = await fetch('/api/metrics?scope=hot_picks&days=30')
       if (!res.ok) throw new Error('metrics fetch failed')
       const data = await res.json()
       setMetrics(data)

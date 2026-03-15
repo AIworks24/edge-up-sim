@@ -6,48 +6,27 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin }            from '@/lib/database/supabase-admin'
-import { createClient }             from '@supabase/supabase-js'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
-  const scope = searchParams.get('scope') ?? 'all'   // 'all' | 'hot_picks'
-  const days  = parseInt(searchParams.get('days') ?? '0') // 0 = all time
+  const scope = searchParams.get('scope') ?? 'all'
+  const days  = parseInt(searchParams.get('days') ?? '0')
 
-  // ── Resolve authenticated user (optional — falls back to global if no token) ──
-  let userId: string | null = null
-  const authHeader = req.headers.get('authorization')
-  if (authHeader?.startsWith('Bearer ')) {
-    const token = authHeader.replace('Bearer ', '')
-    const anonClient = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
-    const { data: { user } } = await anonClient.auth.getUser(token)
-    if (user) userId = user.id
-  }
-
-  // ── Build query ───────────────────────────────────────────────────────────
+  // ── Build query — global, no user scoping ─────────────────────────────────
   let query = supabaseAdmin
     .from('ai_predictions')
     .select(
       'sport, was_correct, edge_score, confidence_score, edge_tier, ' +
-      'prediction_type, is_daily_pick, requested_by, created_at'
+      'prediction_type, is_daily_pick, created_at'
     )
 
-  // Scope: hot_picks only vs all predictions
   if (scope === 'hot_picks') {
     query = query.eq('is_daily_pick', true)
   }
 
-  // Date window
   if (days > 0) {
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
     query = query.gte('created_at', since)
-  }
-
-  // User scope — requested_by is the correct column name
-  if (userId) {
-    query = query.eq('requested_by', userId)
   }
 
   query = query.order('created_at', { ascending: false }).limit(1000)
