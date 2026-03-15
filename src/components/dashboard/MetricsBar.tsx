@@ -1,32 +1,30 @@
 'use client'
 // src/components/dashboard/MetricsBar.tsx
-//
-// Displays the 30-Day Hot Picks performance bar inside the dashboard.
-// Fetches /api/metrics?scope=hot_picks&days=30 — hot-picks-only data.
-// Requires the auth token so the route can scope results to this user.
-// ─────────────────────────────────────────────────────────────────────────────
+// Reads from /api/metrics?scope=hot_picks&days=30
+// Field names match the fixed api/metrics/route.ts response shape.
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/database/supabase-client'
 
-interface HotPickMetrics {
-  total:    number
-  resolved: number
-  wins:     number
-  losses:   number
-  win_rate: number
-  avg_edge: number
+interface Metrics {
+  total:          number
+  resolved:       number
+  wins:           number
+  losses:         number
+  win_rate:       number
+  avg_edge_score: number
+  by_sport:       Array<{ sport: string; total: number; wins: number; losses: number; win_rate: number }>
 }
 
 export function MetricsBar() {
-  const [metrics, setMetrics] = useState<HotPickMetrics | null>(null)
+  const [metrics, setMetrics] = useState<Metrics | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetchMetrics()
+    loadMetrics()
   }, [])
 
-  async function fetchMetrics() {
+  const loadMetrics = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession()
       const headers: Record<string, string> = {}
@@ -34,16 +32,10 @@ export function MetricsBar() {
         headers['Authorization'] = `Bearer ${session.access_token}`
       }
 
-      const res  = await fetch('/api/metrics?scope=hot_picks&days=30', { headers })
+      const res = await fetch('/api/metrics?scope=hot_picks&days=30', { headers })
       if (!res.ok) throw new Error('metrics fetch failed')
-
       const data = await res.json()
-
-      // The route returns the full payload; we only need the hot_picks segment here
-      const hp: HotPickMetrics = data.hot_picks ?? {
-        total: 0, resolved: 0, wins: 0, losses: 0, win_rate: 0, avg_edge: 0
-      }
-      setMetrics(hp)
+      setMetrics(data)
     } catch (err) {
       console.error('[MetricsBar] fetch error:', err)
     } finally {
@@ -53,10 +45,10 @@ export function MetricsBar() {
 
   if (loading) return <MetricsSkeleton />
 
-  // No resolved picks yet — show a neutral placeholder instead of misleading zeros
+  // Show placeholder until at least one pick is resolved
   if (!metrics || metrics.resolved === 0) {
     return (
-      <div className="bg-slate-800/60 border border-white/5 rounded-xl p-4 text-center">
+      <div className="bg-gray-900 border border-gray-700 rounded-xl p-4 text-center">
         <p className="text-gray-500 text-sm">
           📊 Performance tracking activates once today's picks are graded after games complete.
         </p>
@@ -69,68 +61,65 @@ export function MetricsBar() {
     metrics.win_rate >= 55 ? 'text-green-400'   :
     metrics.win_rate >= 50 ? 'text-yellow-400'  : 'text-red-400'
 
-  // Build a W–L record string
-  const record = `${metrics.wins}–${metrics.losses}`
-
-  // Pending = total picks that haven't been graded yet
-  const pending = metrics.total - metrics.resolved
-
   return (
-    <div className="bg-slate-800/60 border border-white/5 rounded-xl p-4">
+    <div className="bg-gray-900 border border-gray-700 rounded-xl p-4">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide">
           30-Day Performance — Hot Picks
         </h3>
-        <div className="flex items-center gap-3 text-xs text-gray-600">
-          <span>{metrics.resolved} picks graded</span>
-          {pending > 0 && (
-            <span className="text-yellow-600/80">{pending} pending</span>
-          )}
-        </div>
+        <span className="text-xs text-gray-600">{metrics.resolved} picks graded</span>
       </div>
 
       <div className="grid grid-cols-4 gap-4">
-        {/* W–L Record */}
         <div className="text-center">
-          <div className="text-2xl font-bold text-white">{record}</div>
+          <div className="text-2xl font-bold text-white">
+            {metrics.wins}–{metrics.losses}
+          </div>
           <div className="text-xs text-gray-500 mt-1">Record</div>
         </div>
-
-        {/* Win Rate */}
         <div className="text-center">
           <div className={`text-2xl font-bold ${winRateColor}`}>
             {metrics.win_rate}%
           </div>
           <div className="text-xs text-gray-500 mt-1">Win Rate</div>
         </div>
-
-        {/* Avg Edge Score */}
         <div className="text-center">
           <div className="text-2xl font-bold text-blue-300">
-            {metrics.avg_edge}%
+            {metrics.avg_edge_score}%
           </div>
-          <div className="text-xs text-gray-500 mt-1">Avg Edge Score</div>
+          <div className="text-xs text-gray-500 mt-1">Avg Edge</div>
         </div>
-
-        {/* Picks Graded */}
         <div className="text-center">
           <div className="text-2xl font-bold text-purple-300">
-            {metrics.resolved}
+            {metrics.total}
           </div>
-          <div className="text-xs text-gray-500 mt-1">Picks Graded</div>
+          <div className="text-xs text-gray-500 mt-1">Total Picks</div>
         </div>
       </div>
+
+      {metrics.by_sport?.length > 0 && (
+        <div className="mt-4 pt-4 border-t border-gray-700 flex gap-6 flex-wrap">
+          {metrics.by_sport.map(s => (
+            <div key={s.sport} className="text-sm">
+              <span className="text-gray-400 uppercase text-xs">{s.sport}</span>
+              <span className="text-gray-300 ml-2">
+                {s.wins}–{s.losses} ({s.win_rate}%)
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
 
 function MetricsSkeleton() {
   return (
-    <div className="bg-slate-800/60 border border-white/5 rounded-xl p-4 animate-pulse">
-      <div className="h-4 bg-slate-700 rounded w-52 mb-4" />
+    <div className="bg-gray-900 border border-gray-700 rounded-xl p-4 animate-pulse">
+      <div className="h-4 bg-gray-700 rounded w-48 mb-4"></div>
       <div className="grid grid-cols-4 gap-4">
         {[1, 2, 3, 4].map(i => (
-          <div key={i} className="h-10 bg-slate-700/60 rounded" />
+          <div key={i} className="h-10 bg-gray-800 rounded"></div>
         ))}
       </div>
     </div>

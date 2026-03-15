@@ -93,23 +93,23 @@ export default function DashboardPage() {
   const loadMetrics = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session) return
-  
-      const res = await fetch('/api/metrics?scope=all', {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      })
+      const headers: Record<string, string> = {}
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
+ 
+      const res = await fetch('/api/metrics?scope=all', { headers })
       if (!res.ok) return
-  
       const data = await res.json()
-  
+ 
       setStats({
-        winRate:    data.win_rate       ?? 0,   // % of resolved predictions that were correct
-        totalPicks: data.total          ?? 0,   // all predictions run (resolved + pending)
-        roi:        data.roi            ?? 0,   // theoretical ROI at -110 odds
-        edgeScore:  data.avg_edge_score ?? 0,   // mean edge score across all predictions
+        winRate:    data.win_rate        ?? 0,
+        totalPicks: data.resolved        ?? 0,   // resolved picks, not total
+        roi:        data.roi             ?? 0,   // real ROI at -110
+        edgeScore:  data.avg_edge_score  ?? 0,
       })
     } catch (err) {
-      console.error('[dashboard] loadMetrics failed:', err)
+      console.error('Metrics fetch failed:', err)
     }
   }
 
