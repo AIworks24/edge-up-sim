@@ -10,9 +10,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const OC_BASE = 'https://api.sportradar.com/oddscomparison-regular/trial/v1/en/us/tournaments.json'
-  const tournamentId = 'sr:tournament:648'
-  const url = `${OC_BASE}/tournaments/${tournamentId}/schedule.json`
+  const OC_BASE = 'https://api.sportradar.com/oddscomparison/trial/v1/en/us/'
+  const url = `${OC_BASE}/tournaments.json`
 
   const res = await fetch(url, {
     headers: { 'x-api-key': process.env.SPORTRADAR_API_KEY || '' },
