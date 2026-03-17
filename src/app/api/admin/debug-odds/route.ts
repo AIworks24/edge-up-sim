@@ -28,35 +28,4 @@ export async function GET(req: NextRequest) {
     raw_keys: Object.keys(data),
     tournaments: data.tournaments || [],
   })
-
-  // Return the first event in full — shows exactly what fields SR returns
-  const first = events[0]
-
-  // Also dig into consensus lines specifically for spread
-  const consensus = first.consensus
-  const lines = consensus?.lines || []
-  const spdLine = lines.find((l: any) => l.name === 'spread_current')
-  const spdHome = spdLine?.outcomes?.find((o: any) => o.type === 'home')
-
-  return NextResponse.json({
-    total_events: events.length,
-    first_event_id: first.id,
-    first_event_uuids: first.uuids,
-
-    // Full consensus lines — this is what we parse
-    consensus_lines: lines,
-
-    // Zoomed in on spread specifically
-    spread_line_raw: spdLine ?? null,
-    spread_home_outcome_raw: spdHome ?? null,
-    spread_home_keys: spdHome ? Object.keys(spdHome) : [],
-    spread_home_spread_field: spdHome?.spread ?? 'MISSING',
-    spread_home_handicap_field: spdHome?.handicap ?? 'MISSING',
-
-    // The full raw first event (truncated markets to avoid huge response)
-    first_event_raw: {
-      ...first,
-      markets: first.markets?.slice(0, 2) ?? [],
-    },
-  })
 }
