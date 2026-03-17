@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const OC_BASE = 'https://api.sportradar.com/oddscomparison/trial/v1/en/us'
+  const OC_BASE = 'https://api.sportradar.com/oddscomparison-regular/trial/v1/en/us/tournaments.json'
   const tournamentId = 'sr:tournament:648'
   const url = `${OC_BASE}/tournaments/${tournamentId}/schedule.json`
 
