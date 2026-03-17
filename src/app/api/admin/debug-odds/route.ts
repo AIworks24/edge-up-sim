@@ -22,11 +22,12 @@ export async function GET(req: NextRequest) {
   }
 
   const data = await res.json()
-  const events = data.sport_events || data.events || []
 
-  if (events.length === 0) {
-    return NextResponse.json({ error: 'No events returned', raw_keys: Object.keys(data) })
-  }
+  // Just dump the raw response so we can see tournament names and IDs
+  return NextResponse.json({
+    raw_keys: Object.keys(data),
+    tournaments: data.tournaments || [],
+  })
 
   // Return the first event in full — shows exactly what fields SR returns
   const first = events[0]
