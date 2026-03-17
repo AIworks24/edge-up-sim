@@ -47,35 +47,51 @@ async function resolveNcaabTournamentId(): Promise<string | null> {
   const data = await res.json()
   const tournaments: any[] = data.tournaments || []
 
-  // Find any active USA Basketball tournament (covers regular season, March Madness, NIT)
-  const match = tournaments.find((t: any) =>
+  // Collect ALL active USA Basketball tournaments (March Madness + NIT)
+  // Priority order: NCAA Division I National Championship first, then NIT
+  const matches = tournaments.filter((t: any) =>
     t.sport?.id === 'sr:sport:2' &&
     t.category?.country_code === 'USA' &&
     t.current_season != null &&
     (t.name?.includes('NCAA') || t.name?.includes('National Invitation'))
-  )
+  ).sort((a: any, b: any) => {
+    // NCAA Division I National Championship sorts before NIT
+    if (a.name?.includes('National Championship')) return -1
+    if (b.name?.includes('National Championship')) return 1
+    return 0
+  })
 
-  if (!match) {
-    console.error('[odds] No active NCAAB tournament found in OC list')
+  if (matches.length === 0) {
+    console.error('[odds] No active NCAAB tournaments found in OC list')
     return null
   }
 
-  console.log(`[odds] Resolved NCAAB tournament: ${match.name} (${match.id})`)
-  tournamentIdCache.set('ncaab', match.id)
-  return match.id
+  const ids = matches.map((t: any) => t.id).join(',')
+  console.log(`[odds] Resolved NCAAB tournaments: ${matches.map((t: any) => `${t.name} (${t.id})`).join(' | ')}`)
+  tournamentIdCache.set('ncaab', ids)
+  return ids
 }
 
-async function fetchOCTournamentSchedule(tournamentId: string): Promise<any[]> {
-  const url = `${OC_BASE}/tournaments/${tournamentId}/schedule.json`
-  const res = await fetch(url, {
-    headers: { 'x-api-key': process.env.SPORTRADAR_API_KEY || '' },
-  })
-  if (!res.ok) {
-    console.error(`[odds] OC schedule fetch failed: ${res.status} ${url}`)
-    return []
+async function fetchOCTournamentSchedule(tournamentIds: string): Promise<any[]> {
+  const ids = tournamentIds.split(',')
+  const allEvents: any[] = []
+
+  for (const tournamentId of ids) {
+    const url = `${OC_BASE}/tournaments/${tournamentId.trim()}/schedule.json`
+    const res = await fetch(url, {
+      headers: { 'x-api-key': process.env.SPORTRADAR_API_KEY || '' },
+    })
+    if (!res.ok) {
+      console.error(`[odds] OC schedule fetch failed: ${res.status} ${url}`)
+      continue
+    }
+    const data = await res.json()
+    const events = data.sport_events || data.events || []
+    console.log(`[odds] Tournament ${tournamentId.trim()}: ${events.length} events`)
+    allEvents.push(...events)
   }
-  const data = await res.json()
-  return data.sport_events || data.events || []
+
+  return allEvents
 }
 
 export async function attachOddsToGames(
