@@ -25,13 +25,44 @@ import { NormalizedGame } from './games'
 // OC Regular uses a different base path — override srFetch base with full URL
 const OC_BASE = 'https://api.sportradar.com/oddscomparison/trial/v1/en/us'
 
-const NCAAB_TOURNAMENT_ID = 'sr:tournament:648'
-const NBA_TOURNAMENT_ID   = 'sr:tournament:132'
+const NBA_TOURNAMENT_ID = 'sr:tournament:132'
 
-const TOURNAMENT_ID: Record<string, string> = {
-  ncaab: NCAAB_TOURNAMENT_ID,
-  nba:   NBA_TOURNAMENT_ID,
-  nfl:   'sr:tournament:133', // NFL — verify if needed
+// Cache resolved tournament IDs for the process lifetime
+const tournamentIdCache = new Map<string, string>()
+
+// NCAAB: dynamically resolved because SR rotates tournament IDs each season/phase
+// Regular season → March Madness → NIT all have different IDs
+async function resolveNcaabTournamentId(): Promise<string | null> {
+  if (tournamentIdCache.has('ncaab')) return tournamentIdCache.get('ncaab')!
+
+  const url = `${OC_BASE}/tournaments.json`
+  const res = await fetch(url, {
+    headers: { 'x-api-key': process.env.SPORTRADAR_API_KEY || '' },
+  })
+  if (!res.ok) {
+    console.error(`[odds] Tournaments list fetch failed: ${res.status}`)
+    return null
+  }
+
+  const data = await res.json()
+  const tournaments: any[] = data.tournaments || []
+
+  // Find any active USA Basketball tournament (covers regular season, March Madness, NIT)
+  const match = tournaments.find((t: any) =>
+    t.sport?.id === 'sr:sport:2' &&
+    t.category?.country_code === 'USA' &&
+    t.current_season != null &&
+    (t.name?.includes('NCAA') || t.name?.includes('National Invitation'))
+  )
+
+  if (!match) {
+    console.error('[odds] No active NCAAB tournament found in OC list')
+    return null
+  }
+
+  console.log(`[odds] Resolved NCAAB tournament: ${match.name} (${match.id})`)
+  tournamentIdCache.set('ncaab', match.id)
+  return match.id
 }
 
 async function fetchOCTournamentSchedule(tournamentId: string): Promise<any[]> {
@@ -52,9 +83,18 @@ export async function attachOddsToGames(
   sport: string
 ): Promise<NormalizedGame[]> {
   try {
-    const tournamentId = TOURNAMENT_ID[sport]
+    let tournamentId: string | null = null
+
+    if (sport === 'ncaab') {
+      tournamentId = await resolveNcaabTournamentId()
+    } else if (sport === 'nba') {
+      tournamentId = NBA_TOURNAMENT_ID
+    } else if (sport === 'nfl') {
+      tournamentId = 'sr:tournament:133'
+    }
+
     if (!tournamentId) {
-      console.warn(`[odds] No tournament ID configured for sport: ${sport}`)
+      console.warn(`[odds] No tournament ID resolved for sport: ${sport}`)
       return games
     }
 
