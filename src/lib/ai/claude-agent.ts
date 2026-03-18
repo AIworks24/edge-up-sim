@@ -357,13 +357,13 @@ function buildFallback(sim: CBBSimResults, req: SimulationRequest) {
       away_team: req.away_team,
     },
     headline: `${req.home_team} vs ${req.away_team} — ${f(sim.best_edge_score)}% edge on ${best.label}`,
-    game_summary: `Our analytics project ${req.home_team} ${f(sim.home_mean_pts, 0)}–${req.away_team} ${f(sim.away_mean_pts, 0)}, a fair spread of ${f(sim.fair_spread)} vs market ${req.spread_home}. ${req.home_team} ORtg ${f(sim.home_weighted.ORtg)} vs ${req.away_team} DRtg ${f(sim.away_weighted.DRtg)} is the key matchup driver. The fair total of ${f(sim.fair_total)} vs market ${req.total} shows ${sim.total_vs_market > 0 ? 'over' : 'under'} pressure of ${f(Math.abs(sim.total_vs_market), 2)} pts.`,
+    game_summary: `Our analytics project ${req.home_team} ${f(sim.home_mean_pts, 0)}–${req.away_team} ${f(sim.away_mean_pts, 0)}, a fair spread of ${f(sim.fair_spread)} vs market ${req.spread_home}. ${req.home_team} Offensive Rating (ORtg) ${f(sim.home_weighted.ORtg)} vs ${req.away_team} Defensive Rating (DRtg) ${f(sim.away_weighted.DRtg)} is the key matchup driver. The fair total of ${f(sim.fair_total)} vs market ${req.total} shows ${sim.total_vs_market > 0 ? 'over' : 'under'} pressure of ${f(Math.abs(sim.total_vs_market), 2)} pts.`,
     spread: {
       best_side: bets.spread_home.edge_pct >= bets.spread_away.edge_pct ? 'home' as const : 'away' as const,
       home: mkSection(bets.spread_home, spreadFair,
-        `Our fair spread of ${f(sim.fair_spread)} vs market ${req.spread_home} creates a ${f(Math.abs(sim.spread_vs_market), 2)}-pt pricing gap. ${req.home_team}'s ORtg ${f(sim.home_weighted.ORtg)} against ${req.away_team}'s DRtg ${f(sim.away_weighted.DRtg)} drives a ${(bets.spread_home.win_pct * 100).toFixed(1)}% cover probability. Edge score ${f(bets.spread_home.edge_pct)}% — ${bets.spread_home.verdict}.`),
+        `Our fair spread of ${f(sim.fair_spread)} vs market ${req.spread_home} creates a ${f(Math.abs(sim.spread_vs_market), 2)}-pt pricing gap. ${req.home_team}'s Offensive Rating (ORtg) ${f(sim.home_weighted.ORtg)} against ${req.away_team}'s Defensive Rating (DRtg) ${f(sim.away_weighted.DRtg)} drives a ${(bets.spread_home.win_pct * 100).toFixed(1)}% cover probability. Edge score ${f(bets.spread_home.edge_pct)}% — ${bets.spread_home.verdict}.`),
       away: mkSection(bets.spread_away, spreadFair,
-        `${req.away_team} covers ${(bets.spread_away.win_pct * 100).toFixed(1)}% of projections at +${Math.abs(req.spread_home)}. Their ORtg ${f(sim.away_weighted.ORtg)} vs ${req.home_team}'s DRtg ${f(sim.home_weighted.DRtg)} ${sim.away_weighted.ORtg > sim.home_weighted.DRtg ? 'favors the away offense' : 'favors the home defense'}. Edge score ${f(bets.spread_away.edge_pct)}% — ${bets.spread_away.verdict}.`),
+        `${req.away_team} covers ${(bets.spread_away.win_pct * 100).toFixed(1)}% of projections at +${Math.abs(req.spread_home)}. Their Offensive Rating (ORtg) ${f(sim.away_weighted.ORtg)} vs ${req.home_team}'s Defensive Rating (DRtg) ${f(sim.home_weighted.DRtg)} ${sim.away_weighted.ORtg > sim.home_weighted.DRtg ? 'favors the away offense' : 'favors the home defense'}. Edge score ${f(bets.spread_away.edge_pct)}% — ${bets.spread_away.verdict}.`),
     },
     total: {
       best_side: bets.over.edge_pct >= bets.under.edge_pct ? 'over' as const : 'under' as const,
@@ -390,7 +390,7 @@ function buildFallback(sim: CBBSimResults, req: SimulationRequest) {
       analysis: `${best.label} is the highest-value bet at ${f(best.edge_pct)}% edge and ${(best.win_pct * 100).toFixed(1)}% win probability. ${best.verdict === 'BET' ? 'Qualifies as a full unit recommendation.' : 'Edge is below the full-unit threshold — monitor for line movement.'}`,
     },
     key_factors: [
-      `${req.home_team} ORtg ${f(sim.home_weighted.ORtg)} vs ${req.away_team} DRtg ${f(sim.away_weighted.DRtg)} [nat avg 104]`,
+      `${req.home_team} Offensive Rating (ORtg) ${f(sim.home_weighted.ORtg)} vs ${req.away_team} Defensive Rating (DRtg) ${f(sim.away_weighted.DRtg)} [nat avg 104]`,
       `Fair total ${f(sim.fair_total)} vs market ${req.total} — ${f(Math.abs(sim.total_vs_market), 2)}-pt ${sim.total_vs_market > 0 ? 'over' : 'under'} pressure`,
       `Pace ${f(sim.expected_possessions)} possessions — ${sim.expected_possessions > 69 ? 'above average, adds scoring variance' : 'below average, limits total ceiling'}`,
     ],
