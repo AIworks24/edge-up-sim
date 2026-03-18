@@ -210,20 +210,20 @@ Do NOT recycle the same sentences across bet types.
 
 ── SPREAD (write for home side AND away side separately) ──
 The spread edge comes from: fair_spread vs market_spread GAP × cover probability.
-  • Sentence 1: State the exact fair spread (${f(sim.fair_spread)}) vs market (${req.spread_home}) — gap is ${f(Math.abs(sim.spread_vs_market), 2)} pts. State which side this gap favors and WHY.
-  • Sentence 2: Name the specific ORtg/DRtg matchup driving cover probability. For HOME: ${req.home_team} ORtg ${f(sim.home_weighted.ORtg)} vs ${req.away_team} DRtg ${f(sim.away_weighted.DRtg)} [nat avg 104]. For AWAY: ${req.away_team} ORtg ${f(sim.away_weighted.ORtg)} vs ${req.home_team} DRtg ${f(sim.home_weighted.DRtg)}.
+  • Sentence 1: State the exact fair spread (${f(sim.fair_spread)}) vs market (${req.spread_home}). The pricing gap is exactly ${f(Math.abs(sim.spread_vs_market), 2)} pts — DO NOT recalculate this number, use it exactly as given. State which side this gap favors and WHY (gap > 0 = home undervalued; gap < 0 = away undervalued).
+  • Sentence 2: Name the specific Offensive Rating (ORtg)/Defensive Rating (DRtg) matchup driving cover probability. For HOME: ${req.home_team} Offensive Rating (ORtg) ${f(sim.home_weighted.ORtg)} vs ${req.away_team} Defensive Rating (DRtg) ${f(sim.away_weighted.DRtg)} [nat avg 104]. For AWAY: ${req.away_team} Offensive Rating (ORtg) ${f(sim.away_weighted.ORtg)} vs ${req.home_team} Defensive Rating (DRtg) ${f(sim.home_weighted.DRtg)}.
   • Sentence 3: State cover probability and edge score. Format: "[Team] covers [X]% of outcomes. Edge score [Y]% — [VERDICT]."
 
 ── TOTAL (write for OVER and UNDER separately) ──
 The total edge comes from: fair_total vs market_total GAP + pace × PPP scoring environment.
   • Sentence 1: State fair total (${f(sim.fair_total)}) vs market (${req.total}). Gap: ${f(Math.abs(sim.total_vs_market), 2)} pts ${sim.total_vs_market > 0 ? 'ABOVE market → over pressure' : 'BELOW market → under pressure'}.
-  • Sentence 2: Explain the scoring environment using ${f(sim.expected_possessions)} possessions and PPP (${req.home_team} ${f(sim.home_ppp, 4)}, ${req.away_team} ${f(sim.away_ppp, 4)}). For OVER: does pace + PPP support scoring above ${req.total}? For UNDER: does defensive DRtg suppress it?
+  • Sentence 2: Explain the scoring environment using ${f(sim.expected_possessions)} possessions and points-per-possession (PPP) (${req.home_team} ${f(sim.home_ppp, 4)}, ${req.away_team} ${f(sim.away_ppp, 4)}). For OVER: does Pace + PPP support scoring above ${req.total}? For UNDER: does the Defensive Rating (DRtg) suppress it?
   • Sentence 3: Reference style adjustments (Home ${f(sim.home_style_adj, 3)}, Away ${f(sim.away_style_adj, 3)} pts) and state edge score + verdict.
 
 ── MONEYLINE (write for home side AND away side separately) ──
 The moneyline edge comes from: fair ML vs market ML implied probability gap — not the spread.
   • Sentence 1: State fair ML (Home: ${sim.fair_moneyline_home}, Away: ${sim.fair_moneyline_away}) vs market (Home: ${req.odds_ml_home > 0 ? '+' : ''}${req.odds_ml_home}, Away: ${req.odds_ml_away > 0 ? '+' : ''}${req.odds_ml_away}). Convert to implied prob and state the gap.
-  • Sentence 2: Explain what drives outright win probability — the offensive vs defensive matchup. ${req.home_team} wins ${f(sim.home_win_pct * 100)}% outright; ${req.away_team} wins ${f((1 - sim.home_win_pct) * 100)}%. Name the key ORtg/DRtg imbalance.
+  • Sentence 2: Explain what drives outright win probability — the offensive vs defensive matchup. ${req.home_team} wins ${f(sim.home_win_pct * 100)}% outright; ${req.away_team} wins ${f((1 - sim.home_win_pct) * 100)}%. Name the key Offensive Rating (ORtg)/Defensive Rating (DRtg) imbalance.
   • Sentence 3: For the side with positive edge: explicitly call out the EV opportunity (even if win % < 50%). State edge score + verdict.
 
 ── GAME SUMMARY (3 sentences total) ──

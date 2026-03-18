@@ -29,9 +29,13 @@ You receive pre-calculated outputs from our analytics engine. Here is what each 
 - over_pct: Probability total score exceeds the market total line
 
 **Fair Lines (what the market SHOULD price):**
-- fair_spread: Model's true spread. Compare to market_spread to find value.
-  - If fair_spread is -6 and market is -3.5 → home team is undervalued by 2.5 points
-  - If fair_spread is -1 and market is -3.5 → home team is overvalued, bet the away team
+- fair_spread: Model's true spread. The gap (spread_vs_market) is pre-calculated for you as a SIGNED number.
+  - NEVER add the absolute values of two negative spreads together. That produces a wrong result.
+  - CORRECT example: fair=-8.4, market=-7.5 → gap = -8.4 - (-7.5) = -0.9 pts (home is 0.9 pts MORE favored than market implies)
+  - WRONG example: |-8.4| + |-7.5| = 15.9 pts ← THIS IS WRONG, never do this
+  - Always use the pre-calculated spread_vs_market value provided to you. Do not recalculate it.
+  - If fair_spread is -6 and market is -3.5 → spread_vs_market = -2.5 → home team is undervalued by 2.5 points
+  - If fair_spread is -1 and market is -3.5 → spread_vs_market = +2.5 → home team is overvalued, away has value
 - fair_total: Model's true total. Compare to market_total to find over/under value.
   - If fair_total is 151 and market is 143.5 → 7.5 points of unpriced scoring → bet Over
   - If fair_total is 136 and market is 143.5 → market overestimates scoring → bet Under

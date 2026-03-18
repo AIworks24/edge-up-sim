@@ -43,15 +43,34 @@ export interface CBBSimParams {
   w_Season:     number  // 0.60
   w_Last10:     number  // 0.40
   w_Style:      number  // 0.12
+  // Add to CBBSimParams interface:
+  Tournament_Pace_Factor:   number  // 0.985
+  Tournament_PPP_Factor:    number  // 0.972
+  Tournament_PPP_Reversion: number  // 0.12
+  Tournament_Style_Factor:  number  // 0.75
+  Tournament_3PAR_Dampen:   number  // 0.95
+  Tournament_SD_Factor:     number  // 0.85
+  Tournament_Corr_Bump:     number  // 0.05
 }
 
 export const CBB_PARAMS: CBBSimParams = {
   NatAvg_ORtg: 104, NatAvg_DRtg: 104, NatAvg_Pace: 69,
   NatAvg_3PAR: 0.39, NatAvg_TOV: 0.18, NatAvg_FTr: 0.30, NatAvg_ORB: 0.30,
-  HCA_Points: 3, Sims_N: 20000, Base_SD: 12.5, Corr_Base: 0.25,
+  HCA_Points:  2.5,  // Updated: 031626 model (was 3)
+  Sims_N: 20000,
+  Base_SD:    11.5,  // Updated: 031626 model (was 12.5)
+  Corr_Base:  0.30,  // Updated: 031626 model (was 0.25)
   k_SD_3PAR: 0.60, k_SD_TOV: 0.35, k_SD_FTr: 0.20, k_SD_ORB: 0.15,
   c_Style_3PAR: 2.2, c_Style_TOV: 3.0, c_Style_FTr: 2.0, c_Style_ORB: 2.0,
   w_Season: 0.60, w_Last10: 0.40, w_Style: 0.12,
+  // Tournament / Neutral-site parameters (031626 model)
+  Tournament_Pace_Factor:   0.985,
+  Tournament_PPP_Factor:    0.972,
+  Tournament_PPP_Reversion: 0.12,
+  Tournament_Style_Factor:  0.75,
+  Tournament_3PAR_Dampen:   0.95,
+  Tournament_SD_Factor:     0.85,
+  Tournament_Corr_Bump:     0.05,
 }
 
 // ── Data types ────────────────────────────────────────────────────────────────
@@ -205,14 +224,23 @@ export function runCBBSimulation(input: CBBGameInput, params: CBBSimParams = CBB
   const awayW = weight(input.away)
 
   // STEP 2 — Expected Possessions — EXACT Excel B21 ─────────────────────────
-  // =0.65*((HomePace+AwayPace)/2) + 0.35*MIN(HomePace,AwayPace)
-  const expPoss = 0.65 * ((homeW.Pace + awayW.Pace) / 2) + 0.35 * Math.min(homeW.Pace, awayW.Pace)
+  const rawExpPoss = 0.65 * ((homeW.Pace + awayW.Pace) / 2) + 0.35 * Math.min(homeW.Pace, awayW.Pace)
+  const expPoss = input.neutral_site
+    ? rawExpPoss * P.Tournament_Pace_Factor
+    : rawExpPoss
 
   // STEP 3 — Points Per Possession — EXACT Excel B22/B23 ───────────────────
   // Home PPP = (HomeORtg + (AwayDRtg − NatAvg_ORtg)) / 100
   // Away PPP = (AwayORtg + (HomeDRtg − NatAvg_ORtg)) / 100
-  const homePPP = (homeW.ORtg + (awayW.DRtg - P.NatAvg_ORtg)) / 100
-  const awayPPP = (awayW.ORtg + (homeW.DRtg - P.NatAvg_ORtg)) / 100
+  // Updated with Tournament PPP adjustments (031626 model):
+  let homePPP = (homeW.ORtg + (awayW.DRtg - P.NatAvg_ORtg)) / 100
+  let awayPPP = (awayW.ORtg + (homeW.DRtg - P.NatAvg_ORtg)) / 100
+  if (input.neutral_site) {
+    const NAT_PPP = P.NatAvg_ORtg / 100  // 1.04
+    const rev = P.Tournament_PPP_Reversion
+    homePPP = (homePPP * P.Tournament_PPP_Factor) * (1 - rev) + NAT_PPP * rev
+    awayPPP = (awayPPP * P.Tournament_PPP_Factor) * (1 - rev) + NAT_PPP * rev
+  }
 
   // STEP 4 — Style Adjustment — EXACT Excel B24/B25 ────────────────────────
   // =w_Style*(2.2*(3PAR−Nat3PAR) + 3*(NatTOV−TOV) + 2*(FTr−NatFTr) + 2*(ORB−NatORB))
@@ -224,8 +252,9 @@ export function runCBBSimulation(input: CBBGameInput, params: CBBSimParams = CBB
       P.c_Style_FTr  * (w.FTr - P.NatAvg_FTr)        +
       P.c_Style_ORB  * (w.ORB - P.NatAvg_ORB)
     )
-  const homeStyleAdj = styleAdj(homeW)
-  const awayStyleAdj = styleAdj(awayW)
+  const styleMult = input.neutral_site ? P.Tournament_Style_Factor : 1.0
+  const homeStyleAdj = styleAdj(homeW) * styleMult
+  const awayStyleAdj = styleAdj(awayW) * styleMult
 
   // STEP 5 — Mean Points — EXACT Excel B27/B28 ─────────────────────────────
   const hca      = input.neutral_site ? 0 : P.HCA_Points
@@ -245,11 +274,13 @@ export function runCBBSimulation(input: CBBGameInput, params: CBBSimParams = CBB
         P.k_SD_ORB  * (w.ORB      - P.NatAvg_ORB)     // ← signed, no abs
       )
     )
-  const homeSD = calcSD(homeW)
-  const awaySD = calcSD(awayW)
+  const sdFactor = input.neutral_site ? P.Tournament_SD_Factor : 1.0
+  const homeSD = calcSD(homeW) * sdFactor
+  const awaySD = calcSD(awayW) * sdFactor
 
   // STEP 7 — Score Correlation — EXACT Excel B31 ────────────────────────────
-  const corr     = Math.min(0.55, Math.max(0.05, P.Corr_Base))
+  const corrBase = input.neutral_site ? P.Corr_Base + P.Tournament_Corr_Bump : P.Corr_Base
+  const corr     = Math.min(0.55, Math.max(0.05, corrBase))
   const corrTerm = Math.sqrt(1 - corr * corr)
 
   // STEP 8 — Monte Carlo (20,000 iterations) ────────────────────────────────
