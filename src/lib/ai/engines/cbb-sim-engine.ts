@@ -229,7 +229,7 @@ export function runCBBSimulation(input: CBBGameInput, params: CBBSimParams = CBB
     ? rawExpPoss * P.Tournament_Pace_Factor
     : rawExpPoss
 
-  // STEP 3 — Points Per Possession — EXACT Excel B22/B23 ───────────────────
+  // STEP 3 — Points style Per Possession — EXACT Excel B22/B23
   // Home PPP = (HomeORtg + (AwayDRtg − NatAvg_ORtg)) / 100
   // Away PPP = (AwayORtg + (HomeDRtg − NatAvg_ORtg)) / 100
   // Updated with Tournament PPP adjustments (031626 model):
@@ -238,23 +238,26 @@ export function runCBBSimulation(input: CBBGameInput, params: CBBSimParams = CBB
   if (input.neutral_site) {
     const NAT_PPP = P.NatAvg_ORtg / 100  // 1.04
     const rev = P.Tournament_PPP_Reversion
-    homePPP = (homePPP * P.Tournament_PPP_Factor) * (1 - rev) + NAT_PPP * rev
-    awayPPP = (awayPPP * P.Tournament_PPP_Factor) * (1 - rev) + NAT_PPP * rev
+    // Excel B22/B23: revert toward national avg FIRST, then apply PPP dampener
+    homePPP = ((1 - rev) * homePPP + rev * NAT_PPP) * P.Tournament_PPP_Factor
+    awayPPP = ((1 - rev) * awayPPP + rev * NAT_PPP) * P.Tournament_PPP_Factor
   }
 
   // STEP 4 — Style Adjustment — EXACT Excel B24/B25 ────────────────────────
   // =w_Style*(2.2*(3PAR−Nat3PAR) + 3*(NatTOV−TOV) + 2*(FTr−NatFTr) + 2*(ORB−NatORB))
-  // NOTE: TOV term is (NatAvg_TOV − team.TOV) — high turnover HURTS scoring
+  // Excel B24/B25: in neutral/tournament games, 3PAR is dampened INSIDE the formula
+  // before subtracting NatAvg_3PAR — not applied as a multiplier on the total
+  const threePARDampen = input.neutral_site ? P.Tournament_3PAR_Dampen : 1.0
+  const styleFactor    = input.neutral_site ? P.Tournament_Style_Factor : 1.0
   const styleAdj = (w: StatLine): number =>
     P.w_Style * (
-      P.c_Style_3PAR * (w.ThreePAR - P.NatAvg_3PAR) +
-      P.c_Style_TOV  * (P.NatAvg_TOV - w.TOV)        +  // ← NatAvg MINUS team (not team minus Nat)
-      P.c_Style_FTr  * (w.FTr - P.NatAvg_FTr)        +
+      P.c_Style_3PAR * (w.ThreePAR * threePARDampen - P.NatAvg_3PAR) +  // 3PAR dampened inside
+      P.c_Style_TOV  * (P.NatAvg_TOV - w.TOV)                         +
+      P.c_Style_FTr  * (w.FTr - P.NatAvg_FTr)                         +
       P.c_Style_ORB  * (w.ORB - P.NatAvg_ORB)
-    )
-  const styleMult = input.neutral_site ? P.Tournament_Style_Factor : 1.0
-  const homeStyleAdj = styleAdj(homeW) * styleMult
-  const awayStyleAdj = styleAdj(awayW) * styleMult
+    ) * styleFactor
+  const homeStyleAdj = styleAdj(homeW)
+  const awayStyleAdj = styleAdj(awayW)
 
   // STEP 5 — Mean Points — EXACT Excel B27/B28 ─────────────────────────────
   const hca      = input.neutral_site ? 0 : P.HCA_Points
