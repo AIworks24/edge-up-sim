@@ -111,8 +111,13 @@ function dailyScheduleEndpoint(sport: SportKey, y: number, m: string, d: string)
 function normalizeGame(raw: any, sport: SportKey): NormalizedGame {
   const seasonYear = raw.season?.year ?? new Date().getFullYear()
 
-  // FIX: neutral_site is on game.venue object, NOT game root
-  const neutralSite = raw.venue?.neutral_site === true
+  // Primary: Sportradar venue flag
+  // Secondary: detect neutral site when SR doesn't set the flag.
+  // NCAA Tournament games have a `round` object on the game.
+  // Conference tournament games have tournament/title in the game title or round.
+  const srNeutral = raw.venue?.neutral_site === true
+  const hasRound  = raw.round != null   // present on tournament bracket games
+  const neutralSite = srNeutral || hasRound
 
   // FIX: game.home.name already contains full team name ("Maryland Terrapins")
   // There is NO game.home.market at the schedule level — don't try to concat them
