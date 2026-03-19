@@ -153,18 +153,18 @@ ${req.home_team}: ${f(sim.home_mean_pts)} pts  ±${f(sim.home_sd)}
 ${req.away_team}: ${f(sim.away_mean_pts)} pts  ±${f(sim.away_sd)}
 Expected Possessions: ${f(sim.expected_possessions)}
 
-## WEIGHTED STATS  (60% Season / 40% Last-10)  |  National Avg: ORtg 104 / DRtg 104 / Pace 69
+## WEIGHTED STATS  (60% Season / 40% Last-10)  |  National Avg: Offensive Rating (ORtg) 104 / Defensive Rating (DRtg) 104 / Pace 69
 ${req.home_team}:
-  ORtg ${f(sim.home_weighted.ORtg)}  [${sim.home_weighted.ORtg > 104 ? '+' : ''}${f(sim.home_weighted.ORtg - 104)} vs avg]  |  DRtg ${f(sim.home_weighted.DRtg)}  [${sim.home_weighted.DRtg < 104 ? 'BETTER' : 'WORSE'} by ${f(Math.abs(sim.home_weighted.DRtg - 104))}]
-  Pace ${f(sim.home_weighted.Pace)}  |  3PAR ${fp(sim.home_weighted.ThreePAR)} [avg 39%]  |  TOV ${fp(sim.home_weighted.TOV)} [avg 18%, lower=better]
-  FTr ${fp(sim.home_weighted.FTr)} [avg 30%]  |  ORB ${fp(sim.home_weighted.ORB)} [avg 30%]
-  PPP ${f(sim.home_ppp, 4)}  |  Style Adj ${f(sim.home_style_adj, 3)} pts
+  Offensive Rating (ORtg) ${f(sim.home_weighted.ORtg)}  [${sim.home_weighted.ORtg > 104 ? '+' : ''}${f(sim.home_weighted.ORtg - 104)} vs avg]  |  Defensive Rating (DRtg) ${f(sim.home_weighted.DRtg)}  [${sim.home_weighted.DRtg < 104 ? 'BETTER' : 'WORSE'} by ${f(Math.abs(sim.home_weighted.DRtg - 104))}]
+  Pace ${f(sim.home_weighted.Pace)}  |  3-Point Attempt Rate (3PAR) ${fp(sim.home_weighted.ThreePAR)} [avg 39%]  |  Turnover Rate (TOV) ${fp(sim.home_weighted.TOV)} [avg 18%, lower=better]
+  Free-Throw Rate (FTr) ${fp(sim.home_weighted.FTr)} [avg 30%]  |  Offensive Rebound Rate (ORB) ${fp(sim.home_weighted.ORB)} [avg 30%]
+  Points-Per-Possession (PPP) ${f(sim.home_ppp, 4)}  |  Style Adj ${f(sim.home_style_adj, 3)} pts
 
 ${req.away_team}:
-  ORtg ${f(sim.away_weighted.ORtg)}  [${sim.away_weighted.ORtg > 104 ? '+' : ''}${f(sim.away_weighted.ORtg - 104)} vs avg]  |  DRtg ${f(sim.away_weighted.DRtg)}  [${sim.away_weighted.DRtg < 104 ? 'BETTER' : 'WORSE'} by ${f(Math.abs(sim.away_weighted.DRtg - 104))}]
-  Pace ${f(sim.away_weighted.Pace)}  |  3PAR ${fp(sim.away_weighted.ThreePAR)} [avg 39%]  |  TOV ${fp(sim.away_weighted.TOV)} [avg 18%, lower=better]
-  FTr ${fp(sim.away_weighted.FTr)} [avg 30%]  |  ORB ${fp(sim.away_weighted.ORB)} [avg 30%]
-  PPP ${f(sim.away_ppp, 4)}  |  Style Adj ${f(sim.away_style_adj, 3)} pts
+  Offensive Rating (ORtg) ${f(sim.away_weighted.ORtg)}  [${sim.away_weighted.ORtg > 104 ? '+' : ''}${f(sim.away_weighted.ORtg - 104)} vs avg]  |  Defensive Rating (DRtg) ${f(sim.away_weighted.DRtg)}  [${sim.away_weighted.DRtg < 104 ? 'BETTER' : 'WORSE'} by ${f(Math.abs(sim.away_weighted.DRtg - 104))}]
+  Pace ${f(sim.away_weighted.Pace)}  |  3-Point Attempt Rate (3PAR) ${fp(sim.away_weighted.ThreePAR)} [avg 39%]  |  Turnover Rate (TOV) ${fp(sim.away_weighted.TOV)} [avg 18%, lower=better]
+  Free-Throw Rate (FTr) ${fp(sim.away_weighted.FTr)} [avg 30%]  |  Offensive Rebound Rate (ORB) ${fp(sim.away_weighted.ORB)} [avg 30%]
+  Points-Per-Possession (PPP) ${f(sim.away_ppp, 4)}  |  Style Adj ${f(sim.away_style_adj, 3)} pts
 
 ## SIMULATION RESULTS
 Home Win   ${fp(sim.home_win_pct)}   |  Away Win   ${fp(sim.away_win_pct)}
