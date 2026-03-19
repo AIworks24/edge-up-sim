@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
     const { data: dbEvent } = await supabaseAdmin
       .from('sports_events')
       .select('neutral_site')
-      .eq('id', event_id)
+      .or(`id.eq.${event_id},external_event_id.eq.${event_id}`)
       .single()
     // ADD THIS LINE:
     console.log('[SIMULATE] event_id:', event_id, 'dbEvent:', dbEvent, 'dbNeutralSite:', dbEvent?.neutral_site)
