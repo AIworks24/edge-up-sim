@@ -111,13 +111,42 @@ function dailyScheduleEndpoint(sport: SportKey, y: number, m: string, d: string)
 function normalizeGame(raw: any, sport: SportKey): NormalizedGame {
   const seasonYear = raw.season?.year ?? new Date().getFullYear()
 
-  // Primary: Sportradar venue flag
-  // Secondary: detect neutral site when SR doesn't set the flag.
-  // NCAA Tournament games have a `round` object on the game.
-  // Conference tournament games have tournament/title in the game title or round.
-  const srNeutral = raw.venue?.neutral_site === true
-  const hasRound  = raw.round != null   // present on tournament bracket games
-  const neutralSite = srNeutral || hasRound
+  const srNeutral   = raw.venue?.neutral_site === true
+  const hasRound    = raw.round != null
+  const venueName   = (raw.venue?.name || '').toLowerCase()
+  // NCAA tournament games are at neutral venues that don't belong to either team.
+  // Detect by checking if venue city is NOT the home team's city.
+  // Simpler: flag known tournament arena names. This list covers 2026 NCAA brackets.
+  const NEUTRAL_VENUE_KEYWORDS = [
+    'bon secours',   // Greenville SC — First/Second Round 2026
+    'spectrum center',  // Charlotte NC  
+    'ball arena',    // Denver CO
+    'gainbridge',    // Indianapolis
+    'barclays',      // Brooklyn
+    'ppg paints',    // Pittsburgh
+    'lenovo center', // Raleigh
+    'amalie',        // Tampa
+    'rocket mortgage', // Cleveland
+    'enterprise center', // St. Louis
+    'target center', // Minneapolis
+    'paycom',        // Oklahoma City
+    'bok center',    // Tulsa
+    'mvp arena',     // Albany
+    'chi health',    // Omaha
+    'spokane',       // Spokane
+    'united center', // Chicago
+    'kfc yum',       // Louisville
+    'fiserv',        // Milwaukee
+    'golden 1',      // Sacramento
+    'sap center',    // San Jose
+    'moda center',   // Portland
+    'climate pledge', // Seattle
+    'toyota center', // Houston
+    'american airlines', // Dallas
+    'frost bank',    // San Antonio
+  ]
+  const isNeutralVenue = NEUTRAL_VENUE_KEYWORDS.some(kw => venueName.includes(kw))
+  const neutralSite = srNeutral || hasRound || isNeutralVenue
 
   // FIX: game.home.name already contains full team name ("Maryland Terrapins")
   // There is NO game.home.market at the schedule level — don't try to concat them
