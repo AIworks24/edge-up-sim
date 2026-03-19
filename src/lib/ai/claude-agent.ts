@@ -113,6 +113,18 @@ export async function runGameSimulation(req: SimulationRequest): Promise<Simulat
     aiOutput = buildFallback(sim, req)
   }
 
+  // Expand all stat acronyms in every analysis text field
+  if (aiOutput.game_summary)          aiOutput.game_summary = expandAcronyms(aiOutput.game_summary)
+  if (aiOutput.headline)              aiOutput.headline = expandAcronyms(aiOutput.headline)
+  if (aiOutput.spread?.home?.analysis) aiOutput.spread.home.analysis = expandAcronyms(aiOutput.spread.home.analysis)
+  if (aiOutput.spread?.away?.analysis) aiOutput.spread.away.analysis = expandAcronyms(aiOutput.spread.away.analysis)
+  if (aiOutput.total?.over?.analysis)  aiOutput.total.over.analysis = expandAcronyms(aiOutput.total.over.analysis)
+  if (aiOutput.total?.under?.analysis) aiOutput.total.under.analysis = expandAcronyms(aiOutput.total.under.analysis)
+  if (aiOutput.moneyline?.home?.analysis) aiOutput.moneyline.home.analysis = expandAcronyms(aiOutput.moneyline.home.analysis)
+  if (aiOutput.moneyline?.away?.analysis) aiOutput.moneyline.away.analysis = expandAcronyms(aiOutput.moneyline.away.analysis)
+  if (aiOutput.top_pick?.analysis)    aiOutput.top_pick.analysis = expandAcronyms(aiOutput.top_pick.analysis)
+  if (aiOutput.key_factors)           aiOutput.key_factors = aiOutput.key_factors.map(expandAcronyms)
+
   // 6. Attach meta
   const edgeClass = classifyEdgeScore(sim.best_edge_score)
   const output: SimulationOutput = {
@@ -321,6 +333,19 @@ OUTPUT: Return ONLY the JSON object below. No markdown fences. No text before or
   "sizing_note": "<1 sentence on unit sizing based on edge tier>"
 }
 `
+}
+
+// ── Post-process Claude output — expand all stat acronyms ────────────────────
+function expandAcronyms(text: string): string {
+  if (!text) return text
+  return text
+    .replace(/\bORtg\b/g, 'Offensive Rating (ORtg)')
+    .replace(/\bDRtg\b/g, 'Defensive Rating (DRtg)')
+    .replace(/\b3PAR\b/g, '3-Point Attempt Rate (3PAR)')
+    .replace(/\bTOV\b/g, 'Turnover Rate (TOV)')
+    .replace(/\bFTr\b/g, 'Free-Throw Rate (FTr)')
+    .replace(/\bORB\b/g, 'Offensive Rebound Rate (ORB)')
+    .replace(/\bPPP\b/g, 'Points-Per-Possession (PPP)')
 }
 
 // ── Fallback if Claude JSON fails ─────────────────────────────────────────────
