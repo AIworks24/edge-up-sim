@@ -37,6 +37,14 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // Read neutral_site from DB — never trust the client value
+    const { data: dbEvent } = await supabaseAdmin
+      .from('sports_events')
+      .select('neutral_site')
+      .eq('id', event_id)
+      .single()
+    const dbNeutralSite = dbEvent?.neutral_site ?? false
+
     const result = await runGameSimulation({
       event_id, home_team, away_team,
       home_team_sr_id, away_team_sr_id,
@@ -45,7 +53,7 @@ export async function POST(req: NextRequest) {
       odds_total,
       odds_ml_home: odds_ml_home || -110,
       odds_ml_away: odds_ml_away || -110,
-      neutral_site: neutral_site || false,
+      neutral_site: dbNeutralSite,
       user_id, game_time,
       is_hot_pick: false,
     })
