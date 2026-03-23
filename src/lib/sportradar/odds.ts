@@ -149,6 +149,9 @@ export async function attachOddsToGames(
       matched++
       return {
         ...game,
+        // Any game matched from the NCAA tournament OC feed is neutral site by definition.
+        // This overrides whatever the schedule API returned for neutral_site.
+        neutral_site:     true,
         spread_home:      o.spread_home,
         spread_home_odds: o.spread_home_odds,
         spread_away_odds: o.spread_away_odds,
