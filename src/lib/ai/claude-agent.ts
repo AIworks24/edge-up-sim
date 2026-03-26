@@ -16,6 +16,13 @@ import { supabaseAdmin } from '../database/supabase-admin'
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+export interface CustomSimParams {
+  totalPoints?:      number   // Override the O/U line used by the engine
+  pace?:             number   // Override both teams' expected possessions
+  offensiveRating?:  number   // Target ORtg — scales both teams proportionally
+  defensiveRating?:  number   // Target DRtg — scales both teams proportionally
+}
+ 
 export interface SimulationRequest {
   event_id:        string
   home_team:       string
@@ -32,7 +39,9 @@ export interface SimulationRequest {
   neutral_site:    boolean
   user_id?:        string
   is_hot_pick?:    boolean
+  is_game_summary?: boolean   // ← NEW: system-generated summary (no sim quota used)
   game_time?:      string
+  custom_params?:  CustomSimParams  // ← NEW: user slider overrides
 }
 
 export interface BetSection {
@@ -78,6 +87,35 @@ export async function runGameSimulation(req: SimulationRequest): Promise<Simulat
     getTeamStats(req.away_team_sr_id, req.sport as 'ncaab'),
   ])
 
+  // 2a. Apply custom param overrides (user-adjusted scenario sliders)
+  if (req.custom_params) {
+    const cp = req.custom_params
+    // Override the market O/U the engine compares against
+    if (cp.totalPoints != null)     req.total = cp.totalPoints
+ 
+    // Override pace for both teams — engine uses this for expected possessions
+    if (cp.pace != null) {
+      homeStats.season.Pace  = cp.pace
+      homeStats.last10.Pace  = cp.pace
+      awayStats.season.Pace  = cp.pace
+      awayStats.last10.Pace  = cp.pace
+    }
+    // Scale ORtg — adjust both teams proportionally to the target value
+    if (cp.offensiveRating != null) {
+      const natAvg = CBB_PARAMS.NatAvg_ORtg
+      const ratio  = cp.offensiveRating / natAvg
+      homeStats.season.ORtg  *= ratio; homeStats.last10.ORtg  *= ratio
+      awayStats.season.ORtg  *= ratio; awayStats.last10.ORtg  *= ratio
+    }
+    // Scale DRtg — same approach
+    if (cp.defensiveRating != null) {
+      const natAvg = CBB_PARAMS.NatAvg_DRtg
+      const ratio  = cp.defensiveRating / natAvg
+      homeStats.season.DRtg  *= ratio; homeStats.last10.DRtg  *= ratio
+      awayStats.season.DRtg  *= ratio; awayStats.last10.DRtg  *= ratio
+    }
+  }
+ 
   // 2. Build engine input
   const simInput: CBBGameInput = {
     home: { name: req.home_team, season: homeStats.season, last10: homeStats.last10 },
@@ -99,7 +137,7 @@ export async function runGameSimulation(req: SimulationRequest): Promise<Simulat
     model:      'claude-sonnet-4-20250514',
     max_tokens: 3000,
     system:     EDGE_UP_SIM_SYSTEM_PROMPT,
-    messages:   [{ role: 'user', content: buildPrompt(req, sim) }],
+    messages:   [{ role: 'user', content: buildPrompt(req, sim, req.custom_params) }],
   })
 
   // 5. Parse Claude response
@@ -144,7 +182,7 @@ export async function runGameSimulation(req: SimulationRequest): Promise<Simulat
 }
 
 // ── Prompt ────────────────────────────────────────────────────────────────────
-function buildPrompt(req: SimulationRequest, sim: CBBSimResults): string {
+function buildPrompt(req: SimulationRequest, sim: CBBSimResults, customParams?: CustomSimParams): string {
   const { bets } = sim
   const f  = (n: number, d = 1) => n.toFixed(d)
   const fp = (n: number)        => `${(n * 100).toFixed(1)}%`
@@ -160,7 +198,15 @@ Spread : ${req.home_team} ${req.spread_home > 0 ? '+' : ''}${req.spread_home}  (
 Total  : ${req.total}  (${fo(req.odds_total)})
 ML     : ${req.home_team} ${fo(req.odds_ml_home)} / ${req.away_team} ${fo(req.odds_ml_away)}
 
-## PROJECTED SCORE
+${customParams && Object.keys(customParams).length > 0 ? `## CUSTOM SCENARIO PARAMETERS (user-adjusted)
+${customParams.totalPoints      != null ? `Total Points O/U adjusted to: ${customParams.totalPoints} pts` : ''}
+${customParams.pace             != null ? `Game pace adjusted to: ${customParams.pace} possessions` : ''}
+${customParams.offensiveRating  != null ? `Offensive environment scaled to ORtg target: ${customParams.offensiveRating}` : ''}
+${customParams.defensiveRating  != null ? `Defensive environment scaled to DRtg target: ${customParams.defensiveRating}` : ''}
+The projected scores, stats, and edge scores below already reflect these adjustments.
+Reference this custom scenario explicitly in your game_summary, each bet analysis, and sizing_note.
+
+` : ''}## PROJECTED SCORE
 ${req.home_team}: ${f(sim.home_mean_pts)} pts  ±${f(sim.home_sd)}
 ${req.away_team}: ${f(sim.away_mean_pts)} pts  ±${f(sim.away_sd)}
 Expected Possessions: ${f(sim.expected_possessions)}
@@ -432,7 +478,7 @@ async function storePrediction(req: SimulationRequest, sim: CBBSimResults, outpu
   const { data, error } = await supabaseAdmin
     .from('ai_predictions')
     .insert({
-      prediction_type:      req.is_hot_pick ? 'hot_pick' : 'user_simulation',
+      prediction_type:      req.is_game_summary ? 'game_summary' : req.is_hot_pick ? 'hot_pick' : 'user_simulation',
       requested_by:         req.user_id || null,
       confidence_score:     output.confidence        ?? 0,
       edge_score:           output.edge_up_score      ?? 0,
@@ -459,7 +505,8 @@ async function storePrediction(req: SimulationRequest, sim: CBBSimResults, outpu
       sim_home_win_pct:     sim.home_win_pct,
       sim_home_cover_pct:   sim.home_cover_pct,
       sim_over_pct:         sim.over_pct,
-      full_response:        output,
+      full_response:              output,
+      custom_simulation_params:   req.custom_params ?? null,
     })
     .select('id')
     .single()

@@ -7,7 +7,7 @@ import Link from 'next/link'
 import {
   ArrowLeft, Flame, Zap, Clock, TrendingUp,
   CheckCircle2, XCircle, Trophy, BarChart3,
-  ChevronDown, ChevronUp, Calendar
+  ChevronDown, ChevronUp, Calendar, Bookmark
 } from 'lucide-react'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -33,9 +33,63 @@ function fmtOdds(n: number | null) {
   return n > 0 ? `+${n}` : `${n}`
 }
 
+function BetTrackedStats({ stats }: { stats: { totalTracked: number; pending: number; resolved: number; wins: number; losses: number; winRate: number | null; avgEdge: number | null; bySport: Record<string, any> } | null }) {
+  if (!stats || stats.totalTracked === 0) {
+    return (
+      <div className="bg-slate-800/40 border border-white/5 rounded-2xl p-4">
+        <div className="flex items-center gap-2 mb-1">
+          <Bookmark className="w-4 h-4 text-blue-400" />
+          <h3 className="text-sm font-bold text-white">My Tracked Bets</h3>
+        </div>
+        <p className="text-xs text-gray-500">
+          Check the box ☑️ next to any simulation to track bets you've placed. Your personal win rate appears here.
+        </p>
+      </div>
+    )
+  }
+  return (
+    <div className="bg-gradient-to-r from-blue-900/30 to-purple-900/30 border border-blue-500/20 rounded-2xl p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <Bookmark className="w-4 h-4 text-blue-400" />
+        <h3 className="text-sm font-bold text-white">My Tracked Bets Performance</h3>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+        <div className="bg-black/20 rounded-xl p-2.5 text-center">
+          <p className="text-xs text-gray-400">Tracked</p>
+          <p className="text-xl font-black text-white">{stats.totalTracked}</p>
+        </div>
+        <div className="bg-black/20 rounded-xl p-2.5 text-center">
+          <p className="text-xs text-gray-400">Win Rate</p>
+          <p className={`text-xl font-black ${stats.winRate != null && stats.winRate >= 55 ? 'text-green-400' : 'text-gray-300'}`}>
+            {stats.winRate != null ? `${stats.winRate}%` : '—'}
+          </p>
+        </div>
+        <div className="bg-black/20 rounded-xl p-2.5 text-center">
+          <p className="text-xs text-gray-400">W / L</p>
+          <p className="text-lg font-black">
+            <span className="text-green-400">{stats.wins}</span>
+            <span className="text-gray-600"> / </span>
+            <span className="text-red-400">{stats.losses}</span>
+          </p>
+        </div>
+        <div className="bg-black/20 rounded-xl p-2.5 text-center">
+          <p className="text-xs text-gray-400">Avg Edge</p>
+          <p className={`text-xl font-black ${stats.avgEdge != null && stats.avgEdge > 3 ? 'text-green-400' : 'text-gray-300'}`}>
+            {stats.avgEdge != null ? `+${stats.avgEdge}%` : '—'}
+          </p>
+        </div>
+      </div>
+      {stats.pending > 0 && (
+        <p className="text-xs text-gray-500 text-center">{stats.pending} bet{stats.pending !== 1 ? 's' : ''} pending outcome</p>
+      )}
+    </div>
+  )
+}
+
 // ── Expandable simulation card ────────────────────────────────────────────────
-function SimCard({ pred }: { pred: any }) {
+function SimCard({ pred, onToggleBet, isUpdating }: { pred: any; onToggleBet?: (id: string, placed: boolean) => void; isUpdating?: boolean }) {
   const [open, setOpen] = useState(false)
+  const [betPlaced, setBetPlaced] = useState<boolean>(pred.user_placed_bet ?? false)
   const tp      = pred.recommended_line?.top_pick
   const isBet   = (pred.edge_score ?? 0) >= 20
   const factors = Array.isArray(pred.key_factors) ? pred.key_factors : []
@@ -59,6 +113,29 @@ function SimCard({ pred }: { pred: any }) {
             {pred.prediction_type === 'hot_pick' ? '🔥 Hot Pick' : '⚡ My Sim'}
           </span>
 
+          {pred.prediction_type !== 'hot_pick' && onToggleBet && (
+            <label
+              className="flex items-center gap-1 cursor-pointer group/chk"
+              title={betPlaced ? 'Click to unmark bet' : 'Mark as a bet you placed'}
+              onClick={e => e.stopPropagation()}
+            >
+              <input
+                type="checkbox"
+                checked={betPlaced}
+                disabled={isUpdating}
+                onChange={e => {
+                  const next = e.target.checked
+                  setBetPlaced(next)
+                  onToggleBet(pred.id, next)
+                }}
+                className="w-3.5 h-3.5 rounded accent-blue-500 cursor-pointer disabled:cursor-wait"
+              />
+              <span className={`text-xs transition ${betPlaced ? 'text-blue-400' : 'text-gray-600 group-hover/chk:text-gray-400'}`}>
+                {betPlaced ? 'Tracked' : 'Track'}
+              </span>
+            </label>
+          )}
+ 
           {/* Game */}
           <div>
             <span className="text-xs text-gray-500">{pred.away_team} @</span>{' '}
@@ -198,6 +275,8 @@ export default function HistoryPage() {
   const [stats, setStats] = useState({
     total: 0, correct: 0, winRate: 0, avgEdge: 0,
   })
+  const [trackedStats, setTrackedStats] = useState<any>(null)
+  const [updatingIds, setUpdatingIds]   = useState<Set<string>>(new Set())
 
   useEffect(() => { loadHistory() }, [filter])
 
@@ -231,6 +310,7 @@ export default function HistoryPage() {
         winRate: resolved.length ? Math.round((correct / resolved.length) * 100) : 0,
         avgEdge: Math.round(avgEdge * 10) / 10,
       })
+      loadTrackedStats()
     } catch (err) {
       console.error('Error loading history:', err)
     } finally {
@@ -238,6 +318,40 @@ export default function HistoryPage() {
     }
   }
 
+  async function loadTrackedStats() {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      const res = await fetch('/api/predictions/track-bet', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setTrackedStats(data.stats)
+      }
+    } catch {}
+  }
+ 
+  async function handleToggleBet(predictionId: string, placed: boolean) {
+    setUpdatingIds(prev => { const s = new Set(prev); s.add(predictionId); return s })
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      await fetch('/api/predictions/track-bet', {
+        method:  'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization:  `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ predictionId, placed }),
+      })
+      await loadTrackedStats()
+    } catch {}
+    finally {
+      setUpdatingIds(prev => { const s = new Set(prev); s.delete(predictionId); return s })
+    }
+  }
+ 
   const statCards = [
     { label: 'Total Sims',  value: stats.total,              icon: BarChart3,  color: 'text-blue-400'   },
     { label: 'Win Rate',    value: `${stats.winRate}%`,      icon: Trophy,     color: 'text-green-400'  },
@@ -270,6 +384,8 @@ export default function HistoryPage() {
       </div>
 
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-8">
+
+        <BetTrackedStats stats={trackedStats} />
 
         {/* Stats row */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -347,7 +463,12 @@ export default function HistoryPage() {
           ) : (
             <div className="space-y-3">
               {simulations.map((pred: any) => (
-                <SimCard key={pred.id} pred={pred} />
+                <SimCard
+                  key={pred.id}
+                  pred={pred}
+                  onToggleBet={handleToggleBet}
+                  isUpdating={updatingIds.has(pred.id)}
+                />
               ))}
             </div>
           )}

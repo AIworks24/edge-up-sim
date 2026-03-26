@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
     home_team_sr_id, away_team_sr_id,
     sport, spread_home, total,
     odds_spread, odds_total, odds_ml_home, odds_ml_away,
-    neutral_site, user_id, game_time,
+    neutral_site, user_id, game_time, custom_params,
   } = body
 
   if (!user_id) {
@@ -58,7 +58,9 @@ export async function POST(req: NextRequest) {
       odds_ml_away: odds_ml_away || -110,
       neutral_site: dbNeutralSite,
       user_id, game_time,
-      is_hot_pick: false,
+      is_hot_pick:    false,
+      is_game_summary: false,
+      custom_params:  custom_params ?? undefined,
     })
 
     // Increment using your actual columns: daily_simulation_count, monthly_simulation_count

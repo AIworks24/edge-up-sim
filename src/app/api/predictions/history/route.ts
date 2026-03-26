@@ -46,7 +46,8 @@ export async function GET(req: NextRequest) {
       sim_home_win_pct, sim_home_cover_pct, sim_over_pct,
       prediction_type, is_daily_pick, daily_pick_rank,
       was_correct, actual_winner, actual_score,
-      user_feedback, odds_snapshot
+      user_feedback, odds_snapshot,
+      user_placed_bet, bet_placed_at, custom_simulation_params
     `)
     .eq('requested_by', user.id)
     .order('created_at', { ascending: false })
