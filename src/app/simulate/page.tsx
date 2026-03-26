@@ -232,9 +232,9 @@ function CustomParamsModal({
               </div>
               <button
                 onClick={() => setUseCustom(v => !v)}
-                className={`relative w-11 h-6 rounded-full transition-colors ${useCustom ? 'bg-blue-600' : 'bg-slate-600'}`}
+                className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${useCustom ? 'bg-blue-600' : 'bg-slate-600'}`}
               >
-                <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${useCustom ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${useCustom ? 'translate-x-5' : 'translate-x-0'}`} />
               </button>
             </div>
 
@@ -375,10 +375,11 @@ function GameSummaryCard({ summary, onClick }: { summary: GameSummary; onClick: 
 // ── LiveGameCard (fallback) ───────────────────────────────────────────────────
 
 function LiveGameCard({ game, isSelected, onClick }: { game: LiveGame; isSelected: boolean; onClick: () => void }) {
-  const odds    = parseOdds(game.odds_data)
+  const odds     = parseOdds(game.odds_data)
   const gameDate = new Date(game.commence_time)
   const dateStr  = gameDate.toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-
+  const hasOdds  = odds.spread || odds.total || odds.moneyline
+ 
   return (
     <button
       onClick={onClick}
@@ -394,12 +395,14 @@ function LiveGameCard({ game, isSelected, onClick }: { game: LiveGame; isSelecte
           </div>
           <ChevronDown className={`w-4 h-4 flex-shrink-0 text-gray-400 transition ${isSelected ? 'rotate-180' : ''}`} />
         </div>
-        {(odds.spread || odds.total || odds.moneyline) && (
+        {hasOdds ? (
           <div className="flex gap-3 text-xs text-gray-400 flex-wrap">
             {odds.spread    && <span>Spread: <span className="text-white">{odds.spread.home}</span></span>}
             {odds.total     && <span>Total: <span className="text-white">{odds.total.over}</span></span>}
             {odds.moneyline && <span>ML: <span className="text-white">{odds.moneyline.home}</span></span>}
           </div>
+        ) : (
+          <div className="text-xs text-gray-600 italic">Lines not yet available — simulation will use market defaults</div>
         )}
       </div>
     </button>

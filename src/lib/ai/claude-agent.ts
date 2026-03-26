@@ -480,6 +480,7 @@ async function storePrediction(req: SimulationRequest, sim: CBBSimResults, outpu
     .insert({
       prediction_type:      req.is_game_summary ? 'game_summary' : req.is_hot_pick ? 'hot_pick' : 'user_simulation',
       requested_by:         req.user_id || null,
+      event_id:             req.event_id || null,
       confidence_score:     output.confidence        ?? 0,
       edge_score:           output.edge_up_score      ?? 0,
       ai_analysis:          output.game_summary       || 'No analysis available',
