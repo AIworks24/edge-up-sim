@@ -302,7 +302,7 @@ export function runCBBSimulation(input: CBBGameInput, params: CBBSimParams = CBB
     const total  = hPts + aPts
 
     if (margin > 0)              homeWins++
-    if (margin > input.spread_home) homeCovers++ // spread_home is negative for home fav
+    if (margin > -input.spread_home) homeCovers++ // spread_home is negative for home fav
     if (total  > input.total)    overs++
 
     sumMargin += margin
@@ -372,7 +372,7 @@ export function runCBBSimulation(input: CBBGameInput, params: CBBSimParams = CBB
     best_bet:             bestBetData?.side ?? 'none',
     best_edge_score:      bestBetData?.edge_pct ?? 0,
     best_confidence_pct:  bestBetData ? bestBetData.win_pct * 100 : 0,
-    spread_vs_market:     fairSpread - input.spread_home,
+    spread_vs_market:     fairSpread + input.spread_home,
     total_vs_market:      fairTotal  - input.total,
   }
 }
