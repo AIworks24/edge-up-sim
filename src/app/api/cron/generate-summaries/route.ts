@@ -141,7 +141,7 @@ export async function GET(req: NextRequest) {
           console.log(`[generate-summaries] ✓ ${event.away_team} @ ${event.home_team}`)
 
           // Small delay to avoid rate-limiting SR/Claude APIs
-          await new Promise(r => setTimeout(r, 800))
+          await new Promise(r => setTimeout(r, 1500))
 
         } catch (eventErr: any) {
           console.error(`[generate-summaries] Error on ${event.home_team}:`, eventErr.message)
