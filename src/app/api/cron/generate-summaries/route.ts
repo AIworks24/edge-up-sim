@@ -124,7 +124,7 @@ export async function GET(req: NextRequest) {
             away_team:       event.away_team,
             home_team_sr_id: event.home_team_sr_id,
             away_team_sr_id: event.away_team_sr_id,
-            sport:           event.sport_key as 'ncaab',
+            sport:           event.sport_key as 'ncaab' | 'nba',
             spread_home:     o.spread_home      ?? 0,
             total:           o.total            ?? 140,
             odds_spread:     o.spread_home_odds ?? -110,
