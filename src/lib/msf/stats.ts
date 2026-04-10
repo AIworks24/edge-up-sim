@@ -320,6 +320,22 @@ async function getLastNGameStats(
   }
 }
 
+// ── In-memory cache for team_stats_totals ────────────────────────────────────
+// Avoids fetching all 30 teams on every simulation call (2 calls per sim).
+// TTL: 5 minutes — enough to stay fresh for odds/lineup changes during a session.
+
+const statsCache = new Map<string, { data: any; expires: number }>()
+
+async function getAllTeamStats(league: string, season: string): Promise<any> {
+  const key = `${league}/${season}`
+  const cached = statsCache.get(key)
+  if (cached && cached.expires > Date.now()) return cached.data
+
+  const data = await msfFetch<any>(league, season, 'team_stats_totals')
+  statsCache.set(key, { data, expires: Date.now() + 5 * 60 * 1000 })
+  return data
+}
+
 // ── Main export: getTeamStats ─────────────────────────────────────────────────
 // Drop-in replacement for Sportradar's getTeamStats()
 // teamId = MSF numeric team ID (string), sport = 'nba' | 'nfl' | 'ncaab'
@@ -331,10 +347,20 @@ export async function getTeamStats(
   const league = MSF_LEAGUE[sport]
   const season = getMSFSeason(sport)
 
-  const data = await msfFetch<any>(league, season, 'team_stats_totals', { team: teamId })
-  const teamData = (data.teamStatsTotals || [])[0]
+  // CRITICAL: Do NOT pass { team: teamId } as a filter here.
+  // MSF's team_stats_totals filter silently fails with numeric IDs, returning
+  // all 30 teams. Taking [0] then gives every team the same (first alphabetical)
+  // stats — producing near-zero fair spreads and 200%+ fake edge scores.
+  //
+  // Fix: fetch all teams once (cached), find the correct team by numeric ID.
+  const data      = await getAllTeamStats(league, season)
+  const allTeams: any[] = data.teamStatsTotals || []
 
-  if (!teamData) throw new Error(`[msf/stats] No stats found for team ${teamId} (${sport})`)
+  // Match by numeric team ID (primary) or abbreviation (fallback)
+  const teamData = allTeams.find((t: any) => String(t.team?.id) === String(teamId))
+    ?? allTeams.find((t: any) => t.team?.abbreviation?.toUpperCase() === teamId.toUpperCase())
+
+  if (!teamData) throw new Error(`[msf/stats] No stats found for team ${teamId} (${sport}) — available IDs: ${allTeams.map((t: any) => t.team?.id).join(', ')}`)
 
   const team   = teamData.team  || {}
   const abbr   = team.abbreviation || teamId
