@@ -416,7 +416,7 @@ export default function SimulatePage() {
   const [user, setUser]         = useState<any>(null)
   const [profile, setProfile]   = useState<any>(null)
   const [loading, setLoading]   = useState(true)
-  const [selectedSport, setSelectedSport] = useState('ncaab')
+  const [selectedSport, setSelectedSport] = useState('nba')
 
   // Summary feed state
   const [summaries, setSummaries]         = useState<GameSummary[]>([])
@@ -692,8 +692,8 @@ export default function SimulatePage() {
                 <div className="flex items-center gap-2 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-xl">
                   <AlertCircle className="w-4 h-4 text-yellow-400" />
                   <p className="text-xs text-yellow-300">
-                    Auto-generated analyses not yet available for today — showing live games. Check back after 11:30am EST.
-                  </p>
+                    Showing live games!                         
+                    </p>
                 </div>
                 {loadingLive ? (
                   <div className="flex items-center justify-center py-8">

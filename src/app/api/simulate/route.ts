@@ -40,16 +40,18 @@ export async function POST(req: NextRequest) {
     // Read neutral_site from DB — never trust the client value
     const { data: dbEvent } = await supabaseAdmin
       .from('sports_events')
-      .select('neutral_site')
+      .select('id, neutral_site')
       .or(`id.eq.${event_id},external_event_id.eq.${event_id}`)
       .single()
-    // ADD THIS LINE:
-    console.log('[SIMULATE] event_id:', event_id, 'dbEvent:', dbEvent, 'dbNeutralSite:', dbEvent?.neutral_site)
-    
-    const dbNeutralSite = dbEvent?.neutral_site ?? false
+
+    const dbRow          = dbEvent as { id: string; neutral_site: boolean } | null
+    const dbNeutralSite  = dbRow?.neutral_site ?? false
+    const dbEventUUID    = dbRow?.id           ?? event_id
+
+    console.log('[SIMULATE] event_id (MSF):', event_id, '→ Supabase UUID:', dbEventUUID)
 
     const result = await runGameSimulation({
-      event_id, home_team, away_team,
+      event_id: dbEventUUID, home_team, away_team,
       home_team_sr_id, away_team_sr_id,
       sport, spread_home, total,
       odds_spread,
