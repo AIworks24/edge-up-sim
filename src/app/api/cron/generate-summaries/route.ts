@@ -17,7 +17,7 @@ import { runGameSimulation }         from '@/lib/ai/claude-agent'
 import { supabaseAdmin }             from '@/lib/database/supabase-admin'
 
 // Only generate for sports where the simulation engine is active
-const ACTIVE_SPORTS = ['ncaab'] as const
+const ACTIVE_SPORTS = ['ncaab', 'nba'] as const
 
 export async function GET(req: NextRequest) {
   const authHeader  = req.headers.get('authorization')

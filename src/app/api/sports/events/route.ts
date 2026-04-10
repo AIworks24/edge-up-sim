@@ -1,36 +1,41 @@
 // src/app/api/sports/events/route.ts
 //
-// Always fetches LIVE from SportRadar on every request. No cache reads.
-// Odds and schedules change frequently, so we never serve stale data.
-// After fetching, upserts to DB in background so simulation engine has team IDs.
+// Converted from Sportradar → MySportsFeeds (MSF).
+// Fetches upcoming games + odds live on every request.
+// Upserts to DB in background so simulation engine has current team IDs.
 
 import { NextRequest, NextResponse } from "next/server"
-import { getUpcomingGames }  from "@/lib/sportradar/games"
-import { attachOddsToGames } from "@/lib/sportradar/odds"
+import { getUpcomingGames }  from "@/lib/msf/games"
+import { attachOddsToGames } from "@/lib/msf/odds"
 import { supabaseAdmin }     from "@/lib/database/supabase-admin"
-import { SportKey }          from "@/lib/sportradar/config"
+import { SportKey }          from "@/lib/msf/config"
 
 function sportTitle(sport: string): string {
   const titles: Record<string, string> = {
     ncaab: "NCAA Men's Basketball",
     nba:   "NBA",
     nfl:   "NFL Football",
+    ncaaf: "NCAA Football",
   }
   return titles[sport] ?? sport.toUpperCase()
 }
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
-  const sport = (searchParams.get("sport") || "ncaab") as SportKey
+  const sport = (searchParams.get("sport") || "nba") as SportKey
 
-  console.log("[events] LIVE fetch sport=" + sport)
+  console.log("[events] MSF live fetch sport=" + sport)
 
   try {
-    let games = await getUpcomingGames(sport, 3)
+    let games = await getUpcomingGames(sport, 7)
     console.log("[events] Schedule: " + games.length + " games")
 
     if (games.length === 0) {
-      return NextResponse.json({ events: [], source: "live", message: "No upcoming games scheduled" })
+      return NextResponse.json({
+        events:  [],
+        source:  "live",
+        message: "No upcoming games scheduled",
+      })
     }
 
     games = await attachOddsToGames(games, sport)
@@ -45,6 +50,8 @@ export async function GET(req: NextRequest) {
       home_team:         g.home_team,
       away_team:         g.away_team,
       event_status:      "upcoming",
+      // MSF uses numeric IDs stored as strings — field renamed from _sr_id
+      // but kept as home_team_sr_id in DB schema for backward compat
       home_team_sr_id:   g.home_team_id,
       away_team_sr_id:   g.away_team_id,
       neutral_site:      g.neutral_site,
@@ -61,7 +68,7 @@ export async function GET(req: NextRequest) {
       },
     }))
 
-    // Write to DB in background so simulation engine has current team SR IDs
+    // Upsert to DB in background — non-blocking
     supabaseAdmin
       .from("sports_events")
       .upsert(
@@ -90,9 +97,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ events: shaped, source: "live" })
 
   } catch (err: any) {
-    console.error("[events] SportRadar error:", err.message)
+    console.error("[events] MSF error:", err.message)
     return NextResponse.json(
-      { error: "SportRadar fetch failed: " + err.message, events: [] },
+      { error: "MSF fetch failed: " + err.message, events: [] },
       { status: 500 }
     )
   }

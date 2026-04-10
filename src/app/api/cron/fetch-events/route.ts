@@ -1,22 +1,22 @@
 // src/app/api/cron/fetch-events/route.ts
 //
-// Converted from Odds API to SportRadar. No references to @/lib/odds-api remain.
-// Runs on schedule (see vercel.json) to keep sports_events table current.
-// Active sports: ncaab (Phase 1). Add nfl/nba as they go live.
+// Converted from Sportradar → MySportsFeeds (MSF).
+// Active sports: ncaab, nba. Add ncaaf/nfl when seasons start.
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getUpcomingGames }  from '@/lib/sportradar/games'
-import { attachOddsToGames } from '@/lib/sportradar/odds'
+import { getUpcomingGames }  from '@/lib/msf/games'
+import { attachOddsToGames } from '@/lib/msf/odds'
 import { supabaseAdmin }     from '@/lib/database/supabase-admin'
-import { SportKey }          from '@/lib/sportradar/config'
+import { SportKey }          from '@/lib/msf/config'
 
-const ACTIVE_SPORTS: SportKey[] = ['ncaab']
+const ACTIVE_SPORTS: SportKey[] = ['nba', 'ncaab']
 
 function sportTitle(sport: string): string {
   const titles: Record<string, string> = {
     ncaab: "NCAA Men's Basketball",
     nba:   'NBA',
     nfl:   'NFL Football',
+    ncaaf: 'NCAA Football',
   }
   return titles[sport] ?? sport.toUpperCase()
 }
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  console.log('[cron/fetch-events] Starting SportRadar fetch...')
+  console.log('[cron/fetch-events] Starting MSF fetch...')
 
   const results = {
     fetched: 0,
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
 
   for (const sport of ACTIVE_SPORTS) {
     try {
-      let games = await getUpcomingGames(sport, 3)
+      let games = await getUpcomingGames(sport, 7)
       console.log(`[cron/fetch-events] ${sport}: ${games.length} games from schedule`)
 
       if (games.length === 0) continue
@@ -107,7 +107,7 @@ export async function GET(request: NextRequest) {
   console.log('[cron/fetch-events] Complete:', results)
 
   return NextResponse.json({
-    success:   true,
+    success:   results.errors.length === 0,
     ...results,
     timestamp: new Date().toISOString(),
   })

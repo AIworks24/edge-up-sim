@@ -8,7 +8,8 @@ import Anthropic from '@anthropic-ai/sdk'
 import {
   runCBBSimulation, CBBGameInput, CBBSimResults, CBB_PARAMS, BetEdge
 } from './engines/cbb-sim-engine'
-import { getTeamStats } from '../sportradar/stats'
+import { runNBASimulation, NBA_PARAMS } from './engines/nba-sim-engine'
+import { getTeamStats } from '../msf/stats'
 import { classifyEdgeScore, RECOMMENDATION_THRESHOLD } from './edge-classifier'
 import { EDGE_UP_SIM_SYSTEM_PROMPT } from './prompts/system-prompt'
 import { supabaseAdmin } from '../database/supabase-admin'
@@ -81,10 +82,10 @@ export interface SimulationOutput {
 // ── Entry point ───────────────────────────────────────────────────────────────
 export async function runGameSimulation(req: SimulationRequest): Promise<SimulationOutput> {
 
-  // 1. SportRadar stats
+  // 1. MSF stats — sport passed directly, handles nba and ncaab
   const [homeStats, awayStats] = await Promise.all([
-    getTeamStats(req.home_team_sr_id, req.sport as 'ncaab'),
-    getTeamStats(req.away_team_sr_id, req.sport as 'ncaab'),
+  getTeamStats(req.home_team_sr_id, req.sport as 'nba' | 'ncaab'),
+  getTeamStats(req.away_team_sr_id, req.sport as 'nba' | 'ncaab'),
   ])
 
   // 2a. Apply custom param overrides (user-adjusted scenario sliders)
@@ -129,8 +130,10 @@ export async function runGameSimulation(req: SimulationRequest): Promise<Simulat
     neutral_site: req.neutral_site,
   }
 
-  // 3. Run Excel-verified simulation
-  const sim = runCBBSimulation(simInput, CBB_PARAMS)
+  // 3. Run simulation — NBA uses NBA_PARAMS and no neutral site factor
+  const sim = req.sport === 'nba'
+  ? runNBASimulation(simInput, NBA_PARAMS)
+  : runCBBSimulation(simInput, CBB_PARAMS)
 
   // 4. Call Claude with full per-bet-type context
   const message = await anthropic.messages.create({
