@@ -32,7 +32,7 @@
 
 import { msfFetch }                          from './client'
 import { NormalizedGame }                    from './games'
-import { SportKey, MSF_LEAGUE, getMSFSeason } from './config'
+import { SportKey, MSF_LEAGUE, getMSFSeason, getMSFSeasonCandidates } from './config'
 
 interface ParsedOdds {
   spread_home:      number | null
@@ -140,10 +140,10 @@ export async function attachOddsToGames(
 ): Promise<NormalizedGame[]> {
   if (games.length === 0) return games
 
-  const league = MSF_LEAGUE[sport]
-  const season = getMSFSeason(sport)
+  const league     = MSF_LEAGUE[sport]
+  const candidates = getMSFSeasonCandidates(sport)
 
-  // Unique dates across all upcoming games
+  // Collect unique dates
   const dateSet = new Set<string>()
   for (const g of games) {
     if (g.commence_time) dateSet.add(toMSFDate(new Date(g.commence_time)))
@@ -152,17 +152,22 @@ export async function attachOddsToGames(
   const oddsMap = new Map<string, ParsedOdds>()
 
   for (const msfDate of Array.from(dateSet)) {
-    try {
-      const data     = await msfFetch<any>(league, season, `date/${msfDate}/odds_gamelines`)
-      const entries: any[] = data.gameLines || []
+    // Try each season candidate — playoff slug first during playoff months
+    for (const season of candidates) {
+      try {
+        const data     = await msfFetch<any>(league, season, `date/${msfDate}/odds_gamelines`)
+        const entries: any[] = data.gameLines || []
 
-      for (const entry of entries) {
-        const gameId = String(entry.game?.id ?? entry.schedule?.id ?? '')
-        if (gameId) oddsMap.set(gameId, parseGameEntry(entry))
+        if (entries.length > 0) {
+          for (const entry of entries) {
+            const gameId = String(entry.game?.id ?? entry.schedule?.id ?? '')
+            if (gameId) oddsMap.set(gameId, parseGameEntry(entry))
+          }
+          break  // Got odds for this date — don't try other season slugs
+        }
+      } catch (err: any) {
+        console.warn(`[msf/odds] No odds for ${msfDate} (${sport}/${season}):`, err.message)
       }
-    } catch (err: any) {
-      // Odds not available for this date (off-season, no lines posted yet)
-      console.warn(`[msf/odds] No odds for ${msfDate} (${sport}):`, err.message)
     }
   }
 
@@ -177,20 +182,25 @@ export async function getOddsForDate(
   sport: SportKey,
   date:  Date,
 ): Promise<Map<string, ParsedOdds>> {
-  const league  = MSF_LEAGUE[sport]
-  const season  = getMSFSeason(sport)
-  const msfDate = toMSFDate(date)
-  const map     = new Map<string, ParsedOdds>()
+  const league     = MSF_LEAGUE[sport]
+  const candidates = getMSFSeasonCandidates(sport)
+  const msfDate    = toMSFDate(date)
+  const map        = new Map<string, ParsedOdds>()
 
-  try {
-    const data    = await msfFetch<any>(league, season, `date/${msfDate}/odds_gamelines`)
-    const entries = data.gameLines || []
-    for (const entry of entries) {
-      const gameId = String(entry.game?.id ?? entry.schedule?.id ?? '')
-      if (gameId) map.set(gameId, parseGameEntry(entry))
+  for (const season of candidates) {
+    try {
+      const data    = await msfFetch<any>(league, season, `date/${msfDate}/odds_gamelines`)
+      const entries = data.gameLines || []
+      if (entries.length > 0) {
+        for (const entry of entries) {
+          const gameId = String(entry.game?.id ?? entry.schedule?.id ?? '')
+          if (gameId) map.set(gameId, parseGameEntry(entry))
+        }
+        break  // Got odds — stop trying other seasons
+      }
+    } catch (err: any) {
+      console.warn(`[msf/odds] getOddsForDate ${msfDate} (${season}):`, err.message)
     }
-  } catch (err: any) {
-    console.warn(`[msf/odds] getOddsForDate ${msfDate}:`, err.message)
   }
 
   return map
