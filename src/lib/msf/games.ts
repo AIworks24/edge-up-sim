@@ -16,7 +16,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { msfFetch }                                     from './client'
-import { SportKey, MSF_LEAGUE, getMSFSeason, getTeamName } from './config'
+import { SportKey, MSF_LEAGUE, getMSFSeason, getMSFSeasonCandidates, getTeamName } from './config'
 
 export interface NormalizedGame {
   id:            string
@@ -109,24 +109,29 @@ function toMSFDate(date: Date): string {
 // ── Fetch upcoming games (next N days) ───────────────────────────────────────
 // Used by the cron job and /api/sports/events
 export async function getUpcomingGames(sport: SportKey, days = 7): Promise<NormalizedGame[]> {
-  const league = MSF_LEAGUE[sport]
-  const season = getMSFSeason(sport)
+  const league     = MSF_LEAGUE[sport]
+  const candidates = getMSFSeasonCandidates(sport)
   const all: NormalizedGame[] = []
 
   for (let i = 0; i < days; i++) {
-    const date = new Date()
+    const date    = new Date()
     date.setDate(date.getDate() + i)
     const msfDate = toMSFDate(date)
 
-    try {
-      // MSF games feed can be scoped by date using the path segment pattern
-      const data = await msfFetch<any>(league, season, `date/${msfDate}/games`)
-      const games = (data.games || []).filter((g: any) =>
-        normalizeStatus(g.schedule?.playedStatus || '') === 'scheduled'
-      )
-      all.push(...games.map((g: any) => normalizeGame(g, sport)))
-    } catch {
-      // No games on this date — continue silently
+    // Try each season candidate in order — first one that returns games wins
+    for (const season of candidates) {
+      try {
+        const data  = await msfFetch<any>(league, season, `date/${msfDate}/games`)
+        const games = (data.games || []).filter((g: any) =>
+          normalizeStatus(g.schedule?.playedStatus || '') === 'scheduled'
+        )
+        if (games.length > 0) {
+          all.push(...games.map((g: any) => normalizeGame(g, sport)))
+          break  // Found games for this date — don't try other season slugs
+        }
+      } catch {
+        // This season slug returned nothing for this date — try next candidate
+      }
     }
   }
 

@@ -22,30 +22,48 @@ export const MSF_LEAGUE: Record<SportKey, string> = {
 }
 
 // Season format per sport
-// NFL:  single year  → "2024-regular"
-// NBA:  two year     → "2024-2025-regular"
 // Both confirmed working from live API
 export function getMSFSeason(sport: SportKey, type: 'regular' | 'playoff' = 'regular'): string {
   const now   = new Date()
-  const month = now.getMonth() + 1   // 1-12
+  const month = now.getMonth() + 1
   const year  = now.getFullYear()
 
   switch (sport) {
     case 'nfl':
     case 'ncaaf':
-      // NFL/NCAAF season: single year, starts September
-      // If before September use previous year's season
       return month >= 9
         ? `${year}-${type}`
         : `${year - 1}-${type}`
 
     case 'nba':
     case 'ncaab':
-      // NBA/NCAAB: two-year format, season starts October
-      // 2025-26 season = "2025-2026-regular"
       const startYear = month >= 10 ? year : year - 1
       return `${startYear}-${startYear + 1}-${type}`
   }
+}
+
+// Returns candidate seasons to try in priority order for a given sport.
+// Playoff slug is tried first during playoff months (April–June for NBA).
+export function getMSFSeasonCandidates(sport: SportKey): string[] {
+  const month = new Date().getMonth() + 1  // 1-12
+
+  if (sport === 'nba' || sport === 'ncaab') {
+    // NBA playoffs: April–June. Try playoff first, then regular as fallback.
+    if (month >= 4 && month <= 6) {
+      return [getMSFSeason(sport, 'playoff'), getMSFSeason(sport, 'regular')]
+    }
+    return [getMSFSeason(sport, 'regular')]
+  }
+
+  if (sport === 'nfl' || sport === 'ncaaf') {
+    // NFL playoffs: January. Try playoff first in January, else regular.
+    if (month === 1) {
+      return [getMSFSeason(sport, 'playoff'), getMSFSeason(sport, 'regular')]
+    }
+    return [getMSFSeason(sport, 'regular')]
+  }
+
+  return [getMSFSeason(sport, 'regular')]
 }
 
 // Static NFL team abbreviation → full name map

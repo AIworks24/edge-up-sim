@@ -30,7 +30,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { msfFetch }                          from './client'
-import { SportKey, MSF_LEAGUE, getMSFSeason } from './config'
+import { SportKey, MSF_LEAGUE, getMSFSeason, getMSFSeasonCandidates } from './config'
 
 // ── Types shared with the simulation engines ──────────────────────────────────
 
@@ -218,8 +218,9 @@ async function getLastNGameStats(
   n:       number = 10,
 ): Promise<{ cbb?: AdvancedStats; nfl?: NFLStatLine } | null> {
   try {
-    const league = MSF_LEAGUE[sport]
-    const season = getMSFSeason(sport)
+    const league     = MSF_LEAGUE[sport]
+    const candidates = getMSFSeasonCandidates(sport)
+    const season     = candidates[0]  // Use most current season for gamelogs
 
     // Fetch gamelogs for the last 90 days — enough to capture last N games
     const toDate   = new Date()
