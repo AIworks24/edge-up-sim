@@ -66,8 +66,8 @@ export const NBA_PARAMS: NBASimParams = {
   c_Style_TOV:  3.0,
   c_Style_FTr:  2.0,
   c_Style_ORB:  2.0,
-  w_Season:     0.45,
-  w_Last10:     0.55,
+  w_Season:     0.65,
+  w_Last10:     0.35,
   w_Style:      0.12,
 }
 
