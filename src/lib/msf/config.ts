@@ -89,21 +89,18 @@ export const NFL_TEAM_NAMES: Record<string, string> = {
 
 // Static NBA team abbreviation → full name map
 export const NBA_TEAM_NAMES: Record<string, string> = {
-  ATL: 'Atlanta Hawks',        BOS: 'Boston Celtics',
-  BKN: 'Brooklyn Nets',        CHA: 'Charlotte Hornets',
-  CHI: 'Chicago Bulls',        CLE: 'Cleveland Cavaliers',
-  DAL: 'Dallas Mavericks',     DEN: 'Denver Nuggets',
-  DET: 'Detroit Pistons',      GS:  'Golden State Warriors',
-  HOU: 'Houston Rockets',      IND: 'Indiana Pacers',
-  LAC: 'LA Clippers',          LAL: 'Los Angeles Lakers',
-  MEM: 'Memphis Grizzlies',    MIA: 'Miami Heat',
-  MIL: 'Milwaukee Bucks',      MIN: 'Minnesota Timberwolves',
-  NO:  'New Orleans Pelicans', NY:  'New York Knicks',
-  OKC: 'Oklahoma City Thunder',ORL: 'Orlando Magic',
-  PHI: 'Philadelphia 76ers',   PHX: 'Phoenix Suns',
-  POR: 'Portland Trail Blazers',SA:  'San Antonio Spurs',
-  SAC: 'Sacramento Kings',     TOR: 'Toronto Raptors',
-  UTA: 'Utah Jazz',            WAS: 'Washington Wizards',
+  GS:  'Golden State Warriors', GSW: 'Golden State Warriors',
+  HOU: 'Houston Rockets',       IND: 'Indiana Pacers',
+  LAC: 'LA Clippers',           LAL: 'Los Angeles Lakers',
+  MEM: 'Memphis Grizzlies',     MIA: 'Miami Heat',
+  MIL: 'Milwaukee Bucks',       MIN: 'Minnesota Timberwolves',
+  NO:  'New Orleans Pelicans',  NOP: 'New Orleans Pelicans',
+  NY:  'New York Knicks',       NYK: 'New York Knicks',
+  OKC: 'Oklahoma City Thunder', OKL: 'Oklahoma City Thunder',
+  ORL: 'Orlando Magic',
+  PHI: 'Philadelphia 76ers',    PHX: 'Phoenix Suns',
+  POR: 'Portland Trail Blazers',
+  SA:  'San Antonio Spurs',     SAS: 'San Antonio Spurs',
 }
 
 export function getTeamName(abbr: string, sport: SportKey): string {
