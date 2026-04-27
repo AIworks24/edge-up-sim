@@ -41,7 +41,6 @@ export async function msfFetch<T>(
     headers: {
       'Authorization':    buildAuthHeader(),
       'Accept':           'application/json',
-      'Accept-Encoding':  'gzip',
     },
     // Don't cache — always fetch fresh data for odds and schedules
     cache: 'no-store',
