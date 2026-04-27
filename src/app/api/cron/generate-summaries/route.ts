@@ -89,6 +89,7 @@ export async function GET(req: NextRequest) {
       }
 
       let processed = 0
+      const gameErrors: string[] = []
 
       for (const event of events) {
         try {
@@ -146,7 +147,7 @@ export async function GET(req: NextRequest) {
 
         } catch (eventErr: any) {
           console.error(`[generate-summaries] Error on ${event.home_team}:`, eventErr.message)
-          // Don't abort the whole batch — continue to next game
+          gameErrors.push(`${event.away_team} @ ${event.home_team}: ${eventErr.message}`)
         }
       }
 
@@ -177,7 +178,7 @@ export async function GET(req: NextRequest) {
         completed_at: new Date().toISOString(),
       }).eq('id', batchRun?.id)
 
-      results[sport] = { processed, total: events.length }
+      results[sport] = { processed, total: events.length, game_errors: gameErrors }
       console.log(`[generate-summaries] ${sport} done: ${processed}/${events.length}`)
 
     } catch (err: any) {
