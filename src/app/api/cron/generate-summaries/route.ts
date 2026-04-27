@@ -76,6 +76,7 @@ export async function GET(req: NextRequest) {
         .gte('commence_time', new Date().toISOString())
         .lte('commence_time', threeDays.toISOString())
         .not('home_team_sr_id', 'is', null)
+        .not('away_team_sr_id', 'is', null)
         .order('commence_time', { ascending: true })
 
       if (eventsError || !events?.length) {
