@@ -76,7 +76,6 @@ export async function GET(req: NextRequest) {
         .gte('commence_time', new Date().toISOString())
         .lte('commence_time', threeDays.toISOString())
         .not('home_team_sr_id', 'is', null)
-        .not('away_team_sr_id', 'is', null)
         .order('commence_time', { ascending: true })
 
       if (eventsError || !events?.length) {
@@ -102,7 +101,7 @@ export async function GET(req: NextRequest) {
             .gte('created_at', `${today}T00:00:00.000Z`)
             .maybeSingle()
 
-          if (existingSummary) {
+          if (existingSummary && !force) {
             console.log(`[generate-summaries] already have summary for ${event.home_team} — skipping`)
             continue
           }
