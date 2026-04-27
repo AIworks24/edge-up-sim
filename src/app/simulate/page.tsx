@@ -297,11 +297,15 @@ function CustomParamsModal({
 
 function GameSummaryCard({ summary, onClick }: { summary: GameSummary; onClick: () => void }) {
   const tp       = summary.recommended_line?.top_pick
+  const ET       = 'America/New_York'
   const gameDate = new Date(summary.game_time)
-  const isToday  = new Date().toDateString() === gameDate.toDateString()
+  const todayET  = new Intl.DateTimeFormat('en-US', { timeZone: ET, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+  const gameDayET = new Intl.DateTimeFormat('en-US', { timeZone: ET, year: 'numeric', month: '2-digit', day: '2-digit' }).format(gameDate)
+  const isToday  = todayET === gameDayET
+  const timeET   = new Intl.DateTimeFormat('en-US', { timeZone: ET, hour: '2-digit', minute: '2-digit' }).format(gameDate)
   const dateStr  = isToday
-    ? `Today · ${gameDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-    : gameDate.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    ? `Today · ${timeET} ET`
+    : new Intl.DateTimeFormat('en-US', { timeZone: ET, weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(gameDate) + ' ET'
 
   return (
     <button
@@ -377,7 +381,8 @@ function GameSummaryCard({ summary, onClick }: { summary: GameSummary; onClick: 
 function LiveGameCard({ game, isSelected, onClick }: { game: LiveGame; isSelected: boolean; onClick: () => void }) {
   const odds     = parseOdds(game.odds_data)
   const gameDate = new Date(game.commence_time)
-  const dateStr  = gameDate.toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  const ET       = 'America/New_York'
+  const dateStr  = new Intl.DateTimeFormat('en-US', { timeZone: ET, weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(gameDate) + ' ET'
   const hasOdds  = odds.spread || odds.total || odds.moneyline
  
   return (
