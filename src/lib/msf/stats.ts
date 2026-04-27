@@ -77,14 +77,18 @@ export interface NFLTeamStats {
 }
 
 export interface NFLStatLine {
-  points_per_game:          number
-  points_allowed:           number
-  plays_per_game:           number   // pace
-  turnover_rate:            number   // turnovers per game
-  red_zone_pct:             number   // proxy: thirdDownsPct (real RZ not in MSF)
-  yards_per_play:           number
-  yards_allowed_per_play:   number   // proxy: derived from opp yards
-  third_down_pct:           number
+  points_per_game:   number   // standings.pointsFor / gp
+  points_allowed:    number   // standings.pointsAgainst / gp
+  plays_per_game:    number   // miscellaneous.offensePlays / gp
+  yards_per_play:    number   // miscellaneous.offenseAvgYds
+  turnover_rate:     number   // (passing.passInt + fumbles.fumLost) / gp
+  third_down_pct:    number   // miscellaneous.thirdDownsPct / 100
+  red_zone_pct:      number   // hardcoded league avg — MSF has no RZ TD field
+                               // NFL: 0.58 = NFL_PARAMS.Lg_Avg_RZ_TD
+                               // NCAAF: 0.62 = NCAAF_PARAMS.Lg_Avg_RZ_TD
+  sacks_allowed_pg:  number   // passing.passSacks / gp
+  havoc_rate:        number   // (tackles.sacks + tackles.tacklesForLoss) / (snapCounts.defenseSnaps / gp)
+  def_turnovers_pg:  number   // (interceptions.interceptions + fumbles.fumForced) / gp
 }
 
 // ── National averages ─────────────────────────────────────────────────────────
@@ -168,42 +172,63 @@ function extractCBBRaw(data: any): RawCBBStats {
 
 // ── NFL stats extraction ──────────────────────────────────────────────────────
 
-function extractNFLStatLine(data: any): NFLStatLine {
+function extractNFLStatLine(data: any, sport: 'nfl' | 'ncaaf' = 'nfl'): NFLStatLine {
   const s    = data.stats        || {}
   const pass = s.passing         || {}
-  const rush = s.rushing         || {}
   const misc = s.miscellaneous   || {}
   const fumb = s.fumbles         || {}
   const stnd = s.standings       || {}
+  const tack = s.tackles         || {}
+  const ints = s.interceptions   || {}
+  const snap = s.snapCounts      || {}
   const gp   = s.gamesPlayed     || 1
-
-  const points_per_game  = (stnd.pointsFor     || 0) / gp
-  const points_allowed   = (stnd.pointsAgainst || 0) / gp
-  const plays_per_game   = (misc.offensePlays  || 0) / gp
-  const yards_per_play   = misc.offenseAvgYds  || 5.5
-  const turnovers_game   = ((pass.passInt || 0) + (fumb.fumLost || 0)) / gp
-  const third_down_pct   = (misc.thirdDownsPct || 40) / 100
-  // Red zone: not in MSF data — use fourth down conversion as proxy
-  // This is an approximation; a future enhancement could compute from gamelogs
-  const red_zone_pct     = (misc.fourthDownsPct || 55) / 100
-
-  // Yards allowed per play: MSF has no opponent yards — estimate from points allowed
-  // Rough conversion: ~6 pts per scoring drive, ~7 plays/drive, ~5.5 yds/play baseline
-  // Better approach: compute from opponent team stats (requires second API call)
-  // For now use a league-avg-adjusted estimate based on points_allowed vs league avg
-  const leagueAvgPts   = 23.4
-  const ratio          = points_allowed > 0 ? points_allowed / leagueAvgPts : 1.0
-  const yards_allowed  = 5.5 * ratio
-
+ 
+  // ── Scoring ───────────────────────────────────────────────────────────────
+  const points_per_game = (stnd.pointsFor     || 0) / gp
+  const points_allowed  = (stnd.pointsAgainst || 0) / gp
+ 
+  // ── Tempo ─────────────────────────────────────────────────────────────────
+  const plays_per_game = (misc.offensePlays || 0) / gp
+  const yards_per_play = misc.offenseAvgYds || 5.5
+ 
+  // ── Turnovers (confirmed: passInt + fumLost are season totals) ────────────
+  const turnover_rate = ((pass.passInt || 0) + (fumb.fumLost || 0)) / gp
+ 
+  // ── 3rd down ──────────────────────────────────────────────────────────────
+  const third_down_pct = (misc.thirdDownsPct || (sport === 'nfl' ? 41 : 40)) / 100
+ 
+  // ── Red zone: MSF has NO red zone TD field in team_stats_totals ───────────
+  // miscellaneous.fourthDownsPct is 4th-down conversion — unrelated to RZ TD%.
+  // Hardcoded to match NFL_PARAMS.Lg_Avg_RZ_TD / NCAAF_PARAMS.Lg_Avg_RZ_TD.
+  // Update both here and in the engine params together when backtesting.
+  const red_zone_pct = sport === 'nfl' ? 0.58 : 0.62
+ 
+  // ── Sacks allowed — REAL (passing.passSacks confirmed in MSF data) ────────
+  const sacks_allowed_pg = (pass.passSacks || 0) / gp
+ 
+  // ── Defensive havoc rate — REAL (tackles + snapCounts confirmed in MSF) ───
+  // havoc = (def sacks + tackles for loss) per defensive snap per game
+  const def_snaps_pg = snap.defenseSnaps
+    ? snap.defenseSnaps / gp
+    : (sport === 'nfl' ? 67.4 : 72.0)    // fallback: NFL ~67, NCAAF ~72 snaps/game
+  const havoc_rate = def_snaps_pg > 0
+    ? ((tack.sacks || 0) + (tack.tacklesForLoss || 0)) / gp / def_snaps_pg
+    : (sport === 'nfl' ? 0.088 : 0.092)  // fallback: confirmed NFL league avg
+ 
+  // ── Defensive turnovers forced — REAL (interceptions + fumForced in MSF) ──
+  const def_turnovers_pg = ((ints.interceptions || 0) + (fumb.fumForced || 0)) / gp
+ 
   return {
-    points_per_game:        Math.round(points_per_game   * 10) / 10,
-    points_allowed:         Math.round(points_allowed    * 10) / 10,
-    plays_per_game:         Math.round(plays_per_game    * 10) / 10,
-    turnover_rate:          Math.round(turnovers_game    * 100) / 100,
-    red_zone_pct:           Math.round(red_zone_pct      * 1000) / 1000,
-    yards_per_play:         Math.round(yards_per_play    * 100) / 100,
-    yards_allowed_per_play: Math.round(yards_allowed     * 100) / 100,
-    third_down_pct:         Math.round(third_down_pct    * 1000) / 1000,
+    points_per_game:   Math.round(points_per_game   * 10)   / 10,
+    points_allowed:    Math.round(points_allowed    * 10)   / 10,
+    plays_per_game:    Math.round(plays_per_game    * 10)   / 10,
+    yards_per_play:    Math.round(yards_per_play    * 100)  / 100,
+    turnover_rate:     Math.round(turnover_rate     * 1000) / 1000,
+    third_down_pct:    Math.round(third_down_pct    * 1000) / 1000,
+    red_zone_pct,
+    sacks_allowed_pg:  Math.round(sacks_allowed_pg  * 100)  / 100,
+    havoc_rate:        Math.round(havoc_rate        * 1000) / 1000,
+    def_turnovers_pg:  Math.round(def_turnovers_pg  * 1000) / 1000,
   }
 }
 
@@ -294,24 +319,34 @@ async function getLastNGameStats(
         stats: {
           gamesPlayed: recent.length,
           passing: {
-            passInt:     avg(g => g.stats?.passing?.passInt    ?? 0) * recent.length,
+            passInt:   avg(g => g.stats?.passing?.passInt   ?? 0) * recent.length,
+            passSacks: avg(g => g.stats?.passing?.passSacks ?? 0) * recent.length,
           },
           fumbles: {
-            fumLost:     avg(g => g.stats?.fumbles?.fumLost    ?? 0) * recent.length,
+            fumLost:   avg(g => g.stats?.fumbles?.fumLost   ?? 0) * recent.length,
+            fumForced: avg(g => g.stats?.fumbles?.fumForced ?? 0) * recent.length,
           },
           miscellaneous: {
-            offensePlays:   avg(g => g.stats?.miscellaneous?.offensePlays  ?? 0) * recent.length,
-            offenseAvgYds:  avg(g => g.stats?.miscellaneous?.offenseAvgYds ?? 0),
-            thirdDownsPct:  avg(g => g.stats?.miscellaneous?.thirdDownsPct ?? 0),
-            fourthDownsPct: avg(g => g.stats?.miscellaneous?.fourthDownsPct ?? 0),
+            offensePlays:  avg(g => g.stats?.miscellaneous?.offensePlays  ?? 0) * recent.length,
+            offenseAvgYds: avg(g => g.stats?.miscellaneous?.offenseAvgYds ?? 0),
+            thirdDownsPct: avg(g => g.stats?.miscellaneous?.thirdDownsPct ?? 0),
           },
           standings: {
             pointsFor:     avg(g => g.stats?.offense?.pts        ?? 0) * recent.length,
             pointsAgainst: avg(g => g.stats?.defense?.ptsAgainst ?? 0) * recent.length,
           },
+          tackles: {
+            sacks:          avg(g => g.stats?.tackles?.sacks          ?? 0) * recent.length,
+            tacklesForLoss: avg(g => g.stats?.tackles?.tacklesForLoss ?? 0) * recent.length,
+          },
+          interceptions: {
+            interceptions: avg(g => g.stats?.interceptions?.interceptions ?? 0) * recent.length,
+          },
+          // snapCounts not in gamelogs — extractNFLStatLine uses per-sport fallback
+          snapCounts: {},
         },
       }
-      return { nfl: extractNFLStatLine(fakeSeasonData) }
+      return { nfl: extractNFLStatLine(fakeSeasonData, sport as 'nfl' | 'ncaaf') }
     }
 
     return null
@@ -394,7 +429,7 @@ export async function getTeamStats(
 
   // NFL/NCAAF — return NFL shape wrapped in TeamSimStats for compatibility
   // The NFL sim engine reads req.home_team_stats / req.away_team_stats separately
-  const seasonLine = extractNFLStatLine(teamData)
+  const seasonLine = extractNFLStatLine(teamData, sport as 'nfl' | 'ncaaf')
   let last5Line    = seasonLine
   try {
     const rolling = await getLastNGameStats(teamId, abbr, sport, 5)

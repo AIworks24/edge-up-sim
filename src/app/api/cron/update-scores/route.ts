@@ -1,26 +1,28 @@
 // src/app/api/cron/update-scores/route.ts
 //
-// Runs nightly after games complete. Fetches final scores from Sportradar,
+// Runs nightly after games complete. Fetches final scores from MySportsFeeds (MSF),
 // evaluates each prediction against the actual result, and writes:
 //   - actual_score     (JSONB: { home, away })
 //   - actual_winner    ('home' | 'away')
 //   - was_correct      (boolean)
 //   - resolved_at      (timestamp)
 //
-// KEY FIXES vs previous version:
-//   1. Reads recommended_line.top_pick correctly (not .bet_side which never existed)
-//   2. SR game ID lookup is fault-tolerant — tries sports_events first,
-//      then falls back to SR daily schedule search by team name + date
-//   3. Writes actual_score / actual_winner in the correct column shape
-//   4. evaluatePrediction() correctly extracts bet_category and label from top_pick
-//   5. Spread evaluation uses market_spread stored at sim time
+// MIGRATED: Sportradar → MySportsFeeds (MSF)
+// KEY CHANGES vs Sportradar version:
+//   1. Removed SR_BASE / SR_KEY — no Sportradar calls anywhere
+//   2. Uses msfFetch + getMSFSeasonCandidates for all score lookups
+//   3. MSF game IDs are numeric strings (not SR UUIDs)
+//   4. Status check: 'completed' (MSF) instead of 'closed' (Sportradar)
+//   5. Score fields: home_score / away_score (MSF naming)
+//   6. getMSFGameResult() tries all season candidates (regular + playoff)
+//      so this cron works correctly during NBA/NFL playoff months
+//   7. searchMSFSchedule() fallback uses MSF date/games feed, not SR schedule
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin }             from '@/lib/database/supabase-admin'
-
-const SR_BASE = 'https://api.sportradar.com'
-const SR_KEY  = process.env.SPORTRADAR_API_KEY ?? ''
+import { msfFetch }                  from '@/lib/msf/client'
+import { SportKey, MSF_LEAGUE, getMSFSeasonCandidates } from '@/lib/msf/config'
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
@@ -67,28 +69,30 @@ export async function GET(req: NextRequest) {
     const gameLabel = `${pred.home_team} vs ${pred.away_team} (${pred.game_time?.split('T')[0]})`
 
     try {
-      // ── Step 1: Get the SR game ID ────────────────────────────────────────
-      const srGameId = await findSrGameId(pred)
+      // ── Step 1: Get the MSF game ID ───────────────────────────────────────
+      const msfGameId = await findMSFGameId(pred)
 
-      if (!srGameId) {
-        skipped.push(`${gameLabel}: SR game ID not found`)
+      if (!msfGameId) {
+        skipped.push(`${gameLabel}: MSF game ID not found`)
         continue
       }
 
-      // ── Step 2: Fetch final score from SR ─────────────────────────────────
-      const result = await getGameResult(srGameId, pred.sport || 'ncaab')
+      // ── Step 2: Fetch final score from MSF ────────────────────────────────
+      const result = await getMSFGameResult(msfGameId, pred.sport || 'nba')
 
       if (!result) {
-        skipped.push(`${gameLabel}: SR fetch failed`)
+        skipped.push(`${gameLabel}: MSF fetch failed`)
         continue
       }
 
-      if (result.status !== 'closed') {
-        skipped.push(`${gameLabel}: status=${result.status} (not closed yet)`)
+      // MSF uses 'completed' — NOT 'closed' (that was Sportradar)
+      if (result.status !== 'completed') {
+        skipped.push(`${gameLabel}: status=${result.status} (not completed yet)`)
         continue
       }
 
-      const { homeScore, awayScore } = result
+      const homeScore = result.home_score
+      const awayScore = result.away_score
 
       if (homeScore === null || awayScore === null) {
         skipped.push(`${gameLabel}: null scores`)
@@ -137,29 +141,29 @@ export async function GET(req: NextRequest) {
   })
 }
 
-// ── Find the Sportradar game ID for a prediction ──────────────────────────────
-// Strategy 1: Look up sports_events table (fastest, works when event is recent)
-// Strategy 2: Search SR daily schedule by date + sport (fallback for older games)
-async function findSrGameId(pred: any): Promise<string | null> {
-  const gameDate = pred.game_time?.split('T')[0]  // 'YYYY-MM-DD'
+// ── Find the MSF game ID for a prediction ─────────────────────────────────────
+// Strategy 1: Look up sports_events table (fastest — populated by cron fetch)
+// Strategy 2: Search MSF daily games feed by date + team name (fallback)
+async function findMSFGameId(pred: any): Promise<string | null> {
+  const gameDate = pred.game_time?.split('T')[0]   // 'YYYY-MM-DD'
 
   // Strategy 1 — sports_events table
+  // MSF game IDs are stored as external_event_id when games are fetched by the cron
   try {
-    // Try exact team name match first
     const { data: exact } = await supabaseAdmin
       .from('sports_events')
       .select('external_event_id')
-      .ilike('home_team', `%${pred.home_team.split(' ').pop()}%`)   // last word of name (e.g. "Cavaliers")
+      .ilike('home_team', `%${pred.home_team.split(' ').pop()}%`)
       .ilike('away_team', `%${pred.away_team.split(' ').pop()}%`)
       .gte('commence_time', `${gameDate}T00:00:00Z`)
       .lte('commence_time', `${gameDate}T23:59:59Z`)
       .limit(5)
 
     if (exact && exact.length === 1) {
-      return exact[0].external_event_id
+      return String(exact[0].external_event_id)
     }
 
-    // If multiple hits (partial match), try stricter match
+    // If multiple hits on the fuzzy match, try a strict name match
     if (exact && exact.length > 1) {
       const { data: strict } = await supabaseAdmin
         .from('sports_events')
@@ -171,83 +175,120 @@ async function findSrGameId(pred: any): Promise<string | null> {
         .limit(1)
 
       if (strict && strict.length === 1) {
-        return strict[0].external_event_id
+        return String(strict[0].external_event_id)
       }
     }
   } catch {
-    // Fall through to SR search
+    // Fall through to MSF search
   }
 
-  // Strategy 2 — SR daily schedule search
+  // Strategy 2 — MSF daily games feed
   if (!gameDate) return null
 
   try {
-    const srGameId = await searchSrSchedule(pred.sport || 'ncaab', gameDate, pred.home_team, pred.away_team)
-    return srGameId
+    return await searchMSFSchedule(
+      pred.sport || 'nba',
+      gameDate,
+      pred.home_team,
+      pred.away_team,
+    )
   } catch {
     return null
   }
 }
 
-// ── Search SR daily schedule for a game ──────────────────────────────────────
-async function searchSrSchedule(
-  sport: string,
-  date: string,           // 'YYYY-MM-DD'
+// ── Search MSF daily games feed for a specific game ───────────────────────────
+// Tries all season candidates (regular + playoff) so it works during transitions.
+async function searchMSFSchedule(
+  sport:    string,
+  date:     string,       // 'YYYY-MM-DD'
   homeTeam: string,
   awayTeam: string,
 ): Promise<string | null> {
-  const [year, month, day] = date.split('-')
-  const sportPath = sport === 'ncaab' ? 'ncaamb' : sport
-  const url = `${SR_BASE}/${sportPath}/trial/v8/en/games/${year}/${month}/${day}/schedule.json`
+  // Guard: only search for supported sports
+  const validSport: SportKey =
+    (sport in MSF_LEAGUE) ? (sport as SportKey) : 'nba'
 
-  const res = await fetch(url, {
-    headers: { 'x-api-key': SR_KEY },
-  })
+  const league     = MSF_LEAGUE[validSport]
+  const candidates = getMSFSeasonCandidates(validSport)
+  const msfDate    = date.replace(/-/g, '')   // 'YYYY-MM-DD' → 'YYYYMMDD'
 
-  if (!res.ok) return null
-
-  const data = await res.json()
-  const games: any[] = data.games || []
-
-  // Fuzzy match: last word of team name (e.g. "Cavaliers" from "Virginia Cavaliers")
+  // Use last word of team name for fuzzy matching (most distinctive part)
+  // e.g. "Los Angeles Lakers" → "lakers"
   const homeWord = homeTeam.split(' ').pop()?.toLowerCase() ?? ''
   const awayWord = awayTeam.split(' ').pop()?.toLowerCase() ?? ''
 
-  const match = games.find(g => {
-    const srHome = (g.home?.name || g.home?.alias || '').toLowerCase()
-    const srAway = (g.away?.name || g.away?.alias || '').toLowerCase()
-    return srHome.includes(homeWord) && srAway.includes(awayWord)
-  })
+  for (const season of candidates) {
+    try {
+      const data  = await msfFetch<any>(league, season, `date/${msfDate}/games`)
+      const games: any[] = data.games || []
 
-  return match?.id ?? null
+      if (games.length === 0) continue
+
+      const match = games.find(g => {
+        const homeAbbr = (g.schedule?.homeTeam?.abbreviation || '').toLowerCase()
+        const awayAbbr = (g.schedule?.awayTeam?.abbreviation || '').toLowerCase()
+
+        // Try last-word match against abbreviation (covers most cases)
+        // Also try the reverse — abbreviation contained in the word
+        const homeMatch =
+          homeAbbr.includes(homeWord) || homeWord.includes(homeAbbr)
+        const awayMatch =
+          awayAbbr.includes(awayWord) || awayWord.includes(awayAbbr)
+
+        return homeMatch && awayMatch
+      })
+
+      if (match) {
+        return String(match.schedule?.id)
+      }
+    } catch {
+      // This season candidate had no data for this date — try the next one
+    }
+  }
+
+  return null
 }
 
-// ── Fetch final score from SR game summary ────────────────────────────────────
-async function getGameResult(gameId: string, sport: string): Promise<{
-  status: string
-  homeScore: number | null
-  awayScore: number | null
-} | null> {
-  try {
-    const sportPath = sport === 'ncaab' ? 'ncaamb' : sport
-    const url = `${SR_BASE}/${sportPath}/trial/v8/en/games/${gameId}/summary.json`
+// ── Fetch final score from MSF ────────────────────────────────────────────────
+// Tries all season candidates so cron resolves correctly during playoff months.
+// Returns MSF-normalized field names: home_score / away_score (not homeScore / awayScore)
+async function getMSFGameResult(
+  gameId: string,
+  sport:  string,
+): Promise<{ status: string; home_score: number | null; away_score: number | null } | null> {
+  const validSport: SportKey =
+    (sport in MSF_LEAGUE) ? (sport as SportKey) : 'nba'
 
-    const res = await fetch(url, {
-      headers: { 'x-api-key': SR_KEY },
-    })
+  const league     = MSF_LEAGUE[validSport]
+  const candidates = getMSFSeasonCandidates(validSport)
 
-    if (!res.ok) return null
+  for (const season of candidates) {
+    try {
+      const data = await msfFetch<any>(league, season, 'games')
+      const game = (data.games || []).find(
+        (g: any) => String(g.schedule?.id) === gameId,
+      )
 
-    const data = await res.json()
+      if (!game) continue
 
-    return {
-      status:     data.status       || 'unknown',
-      homeScore:  data.home?.points ?? null,
-      awayScore:  data.away?.points ?? null,
+      // Normalize MSF playedStatus → our internal status string
+      const s = (game.schedule?.playedStatus || '').toUpperCase()
+      const status =
+        s === 'COMPLETED'                  ? 'completed'  :
+        s === 'LIVE' || s === 'INPROGRESS' ? 'inprogress' : 'scheduled'
+
+      return {
+        status,
+        home_score: game.score?.homeScoreTotal ?? null,
+        away_score: game.score?.awayScoreTotal ?? null,
+      }
+    } catch {
+      // Try next season candidate
     }
-  } catch {
-    return null
   }
+
+  return null
 }
 
 // ── Evaluate whether the stored prediction was correct ────────────────────────
@@ -261,19 +302,19 @@ async function getGameResult(gameId: string, sport: string): Promise<{
 //   Moneyline:  "Virginia Cavaliers ML"   or  "NC State Wolfpack ML"
 //
 function evaluatePrediction(pred: any, homeScore: number, awayScore: number): boolean {
-  const betType   = (pred.recommended_bet_type || '').toLowerCase()
-  const topPick   = pred.recommended_line?.top_pick ?? {}
-  const label     = (topPick.label || '').toLowerCase()
+  const betType  = (pred.recommended_bet_type || '').toLowerCase()
+  const topPick  = pred.recommended_line?.top_pick ?? {}
+  const label    = (topPick.label || '').toLowerCase()
 
   // Grab market lines stored at sim time
   const marketSpread = pred.market_spread ?? pred.odds_snapshot?.spread ?? null
   const marketTotal  = pred.market_total  ?? pred.odds_snapshot?.total  ?? null
 
-  const actualMargin = homeScore - awayScore   // positive = home won
+  const actualMargin = homeScore - awayScore   // positive = home won by this many
   const actualTotal  = homeScore + awayScore
 
   switch (betType) {
-    // ── SPREAD ──────────────────────────────────────────────────────────────
+    // ── SPREAD ───────────────────────────────────────────────────────────────
     // The label tells us which team + which line was the recommendation.
     // We determine home vs away from the label, then apply the spread.
     case 'spread': {

@@ -24,14 +24,16 @@ export type { CBBSimResults, BetEdge, BetSide }
 // Mirrors the NFLStatLine already in stats.ts (kept here so engine layer
 // has no dependency on the MSF layer)
 export interface NFLStatLine {
-  points_per_game:          number  // Avg points scored per game
-  points_allowed:           number  // Avg points allowed per game
-  plays_per_game:           number  // Offensive plays per game (pace proxy)
-  turnover_rate:            number  // Turnovers per game (pass INT + fumbles lost)
-  red_zone_pct:             number  // Red zone TD conversion % (proxy: 4th-down pct)
-  yards_per_play:           number  // Offensive yards per play
-  yards_allowed_per_play:   number  // Defensive yards per play (proxy)
-  third_down_pct:           number  // 3rd down conversion %
+  points_per_game:   number  // standings.pointsFor / gp
+  points_allowed:    number  // standings.pointsAgainst / gp
+  plays_per_game:    number  // miscellaneous.offensePlays / gp
+  yards_per_play:    number  // miscellaneous.offenseAvgYds
+  turnover_rate:     number  // (passInt + fumLost) / gp
+  third_down_pct:    number  // miscellaneous.thirdDownsPct / 100
+  red_zone_pct:      number  // hardcoded 0.58 NFL / 0.62 NCAAF — no MSF RZ field
+  sacks_allowed_pg:  number  // passing.passSacks / gp
+  havoc_rate:        number  // (tackles.sacks + TFLs) / def_snaps_per_game
+  def_turnovers_pg:  number  // (def_INTs + fum_forced) / gp
 }
 
 export interface NFLTeamStats {
@@ -79,11 +81,13 @@ export interface FBSimParams {
   Min_Drives:             number
   Max_Drives:             number
   // Turnover
-  Base_TO_Prob: number
-  K_TO_Edge:    number
-  K_Sack_TO:    number
-  TO_Floor:     number
-  TO_Ceiling:   number
+  Base_TO_Prob:     number
+  K_TO_Edge:        number
+  K_Sack_TO:        number
+  Lg_Avg_Sacks_PD:  number  // league-avg sacks allowed per drive
+  TO_Floor:         number
+  TO_Ceiling:       number
+  Lg_Avg_Havoc:     number  // league-avg defensive havoc rate per snap
   // Sustain
   Base_Sustain_Prob: number
   K_Success:         number
@@ -134,7 +138,9 @@ export const NFL_PARAMS: FBSimParams = {
   Min_Drives: 8, Max_Drives: 13,
 
   Base_TO_Prob: 0.10, K_TO_Edge: 0.35, K_Sack_TO: 0.18,
+  Lg_Avg_Sacks_PD: 0.238,   // NFL avg: ~2.5 sacks/game ÷ 10.5 drives
   TO_Floor: 0.03, TO_Ceiling: 0.28,
+  Lg_Avg_Havoc: 0.088,      // NFL avg confirmed: (1.76 sacks + 4.18 TFLs) / 67.4 snaps
 
   Base_Sustain_Prob: 0.45,
   K_Success: 0.42, K_3D: 0.22, K_YPP: 0.16, K_Explosive: 0.14,
@@ -212,51 +218,57 @@ export function buildBetEdge(
 // ── Internal drive-model stat shape ───────────────────────────────────────────
 // Derived from NFLStatLine inside the engine — not exposed externally
 interface DriveStats {
-  off_ppd:         number
-  def_ppd_allow:   number
-  drives:          number
-  ypp:             number
-  success_rate:    number
-  explosive_rate:  number
-  to_per_drive:    number
-  third_down_off:  number
-  third_down_def:  number
-  rztd_off:        number
-  rztd_def:        number
-  plays_per_drive: number
+  off_ppd:          number
+  def_ppd_allow:    number
+  drives:           number
+  ypp:              number
+  success_rate:     number
+  explosive_rate:   number
+  to_per_drive:     number
+  third_down_off:   number
+  third_down_def:   number
+  rztd_off:         number
+  rztd_def:         number
+  plays_per_drive:  number
+  sacks_per_drive:  number   // REAL — O-line pressure per drive
+  havoc_rate:       number   // REAL — defensive disruption rate per snap
+  def_turnovers_pg: number   // REAL — turnovers forced per game
 }
 
-// Convert NFLStatLine → DriveStats using NFL league-average derivations
+// Convert NFLStatLine → DriveStats
+// Uses real MSF fields for sacks_allowed_pg, havoc_rate, def_turnovers_pg
 function toNFLDriveStats(line: NFLStatLine, P: FBSimParams): DriveStats {
-  // Drives per game: plays / avg plays-per-drive
   const drives = clampFB(
     line.plays_per_game > 0 ? line.plays_per_game / P.Lg_Avg_Plays_Per_Drive : P.Lg_Avg_Drives,
     P.Min_Drives,
     P.Max_Drives,
   )
-  const playsPerDrive = drives > 0 ? line.plays_per_game / drives : P.Lg_Avg_Plays_Per_Drive
-  const offPPD  = drives > 0 ? line.points_per_game / drives : P.Lg_Avg_PPD
-  const defPPDA = drives > 0 ? line.points_allowed  / drives : P.Lg_Avg_PPD
-  const toPD    = drives > 0 ? line.turnover_rate   / drives : P.Lg_Avg_TO_Per_Drive
-
-  // Proxy: success rate from 3rd-down conv (higher 3D ≈ higher overall success)
+  const playsPerDrive  = drives > 0 ? line.plays_per_game / drives : P.Lg_Avg_Plays_Per_Drive
+  const offPPD         = drives > 0 ? line.points_per_game / drives : P.Lg_Avg_PPD
+  const defPPDA        = drives > 0 ? line.points_allowed  / drives : P.Lg_Avg_PPD
+  const toPD           = drives > 0 ? line.turnover_rate   / drives : P.Lg_Avg_TO_Per_Drive
+  const sacks_per_drive = drives > 0 ? line.sacks_allowed_pg / drives : P.Lg_Avg_Sacks_PD
+ 
+  // Proxies (no direct MSF equivalent available)
   const success_rate   = clampFB(line.third_down_pct * 0.80 + 0.10, 0.30, 0.60)
-  // Proxy: explosive rate from YPP (more yards/play → more big plays)
   const explosive_rate = clampFB((line.yards_per_play - 4.0) * 0.025 + 0.08, 0.06, 0.20)
-
+ 
   return {
-    off_ppd:         offPPD,
-    def_ppd_allow:   defPPDA,
+    off_ppd:          offPPD,
+    def_ppd_allow:    defPPDA,
     drives,
-    ypp:             line.yards_per_play,
+    ypp:              line.yards_per_play,
     success_rate,
     explosive_rate,
-    to_per_drive:    toPD,
-    third_down_off:  line.third_down_pct,
-    third_down_def:  line.third_down_pct,   // proxy (own 3D as stand-in)
-    rztd_off:        line.red_zone_pct,
-    rztd_def:        1 - line.red_zone_pct, // proxy (inverse of own RZ conv)
-    plays_per_drive: playsPerDrive,
+    to_per_drive:     toPD,
+    third_down_off:   line.third_down_pct,
+    third_down_def:   line.third_down_pct,        // proxy — MSF has no opp 3D data
+    rztd_off:         line.red_zone_pct,           // 0.58 NFL / 0.62 NCAAF
+    rztd_def:         1 - line.red_zone_pct,       // proxy (inverse)
+    plays_per_drive:  playsPerDrive,
+    sacks_per_drive,                               // REAL — feeds K_Sack_TO
+    havoc_rate:       line.havoc_rate,             // REAL — feeds K_Havoc
+    def_turnovers_pg: line.def_turnovers_pg,       // REAL — available for future use
   }
 }
 
@@ -270,18 +282,21 @@ export function blendDriveStats(
   const b = (key: keyof DriveStats) =>
     (season[key] as number) * wS + (last5[key] as number) * wR
   return {
-    off_ppd:         b('off_ppd'),
-    def_ppd_allow:   b('def_ppd_allow'),
-    drives:          b('drives'),
-    ypp:             b('ypp'),
-    success_rate:    b('success_rate'),
-    explosive_rate:  b('explosive_rate'),
-    to_per_drive:    b('to_per_drive'),
-    third_down_off:  b('third_down_off'),
-    third_down_def:  b('third_down_def'),
-    rztd_off:        b('rztd_off'),
-    rztd_def:        b('rztd_def'),
-    plays_per_drive: b('plays_per_drive'),
+    off_ppd:          b('off_ppd'),
+    def_ppd_allow:    b('def_ppd_allow'),
+    drives:           b('drives'),
+    ypp:              b('ypp'),
+    success_rate:     b('success_rate'),
+    explosive_rate:   b('explosive_rate'),
+    to_per_drive:     b('to_per_drive'),
+    third_down_off:   b('third_down_off'),
+    third_down_def:   b('third_down_def'),
+    rztd_off:         b('rztd_off'),
+    rztd_def:         b('rztd_def'),
+    plays_per_drive:  b('plays_per_drive'),
+    sacks_per_drive:  b('sacks_per_drive'),
+    havoc_rate:       b('havoc_rate'),
+    def_turnovers_pg: b('def_turnovers_pg'),
   }
 }
 

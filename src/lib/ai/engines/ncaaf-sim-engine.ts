@@ -50,7 +50,9 @@ export const NCAAF_PARAMS: FBSimParams = {
   Min_Drives: 8.5, Max_Drives: 15.5,
 
   Base_TO_Prob: 0.11, K_TO_Edge: 0.35, K_Sack_TO: 0.18,
+  Lg_Avg_Sacks_PD: 0.259,   // NCAAF avg: ~3.0 sacks/game ÷ 11.6 drives
   TO_Floor: 0.03, TO_Ceiling: 0.28,
+  Lg_Avg_Havoc: 0.092,      // NCAAF avg: slightly higher disruption rate than NFL
 
   Base_Sustain_Prob: 0.44,
   K_Success: 0.22, K_3D: 0.12, K_YPP: 0.08, K_Explosive: 0.07,
@@ -90,19 +92,24 @@ function toNCAAFDriveStats(line: NFLStatLine, P: FBSimParams) {
   // NCAAF: explosive rate — higher baseline than NFL, more variance in YPP
   const explosive_rate = clampFB((line.yards_per_play - 3.8) * 0.030 + 0.09, 0.06, 0.22)
 
+  const sacks_per_drive = drives > 0 ? line.sacks_allowed_pg / drives : P.Lg_Avg_Sacks_PD
+ 
   return {
-    off_ppd:         offPPD,
-    def_ppd_allow:   defPPDA,
+    off_ppd:          offPPD,
+    def_ppd_allow:    defPPDA,
     drives,
-    ypp:             line.yards_per_play,
+    ypp:              line.yards_per_play,
     success_rate,
     explosive_rate,
-    to_per_drive:    toPD,
-    third_down_off:  line.third_down_pct,
-    third_down_def:  line.third_down_pct,
-    rztd_off:        line.red_zone_pct,
-    rztd_def:        1 - line.red_zone_pct,
-    plays_per_drive: playsPerDrive,
+    to_per_drive:     toPD,
+    third_down_off:   line.third_down_pct,
+    third_down_def:   line.third_down_pct,
+    rztd_off:         line.red_zone_pct,           // 0.62 NCAAF league avg
+    rztd_def:         1 - line.red_zone_pct,
+    plays_per_drive:  playsPerDrive,
+    sacks_per_drive,
+    havoc_rate:       line.havoc_rate,
+    def_turnovers_pg: line.def_turnovers_pg,
   }
 }
 

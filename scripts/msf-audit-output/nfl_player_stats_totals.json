@@ -1,0 +1,146 @@
+{
+  "player": {
+    "id": 6826,
+    "firstName": "Ameer",
+    "lastName": "Abdullah",
+    "primaryPosition": "RB",
+    "jerseyNumber": 26,
+    "currentTeam": {
+      "id": 65,
+      "abbreviation": "IND"
+    },
+    "currentRosterStatus": "ROSTER",
+    "currentInjury": null,
+    "height": "5'9\"",
+    "weight": 203,
+    "birthDate": "1993-06-13",
+    "age": 32,
+    "birthCity": "Mobile, AL",
+    "birthCountry": "USA",
+    "rookie": false,
+    "highSchool": null,
+    "college": "Nebraska",
+    "handedness": null,
+    "officialImageSrc": "https://static.www.nfl.com/image/private/t_headshot_desktop/league/cvjebibvlvv8bclqyc8a",
+    "socialMediaAccounts": []
+  },
+  "team": {
+    "id": 65,
+    "abbreviation": "IND"
+  },
+  "stats": {
+    "gamesPlayed": 13,
+    "passing": {
+      "passAttempts": 0,
+      "passCompletions": 0,
+      "passPct": 0,
+      "passYards": 0,
+      "passAvg": 0,
+      "passYardsPerAtt": 0,
+      "passTD": 0,
+      "passTDPct": 0,
+      "passInt": 0,
+      "passIntPct": 0,
+      "passLng": 0,
+      "pass20Plus": 0,
+      "pass40Plus": 0,
+      "passSacks": 0,
+      "passSackY": 0,
+      "qbRating": 0
+    },
+    "rushing": {
+      "rushAttempts": 14,
+      "rushYards": 60,
+      "rushAverage": 4.3,
+      "rushTD": 1,
+      "rushLng": 44,
+      "rush1stDowns": 3,
+      "rush1stDownsPct": 21.4,
+      "rush20Plus": 0,
+      "rush40Plus": 0,
+      "rushFumbles": 0
+    },
+    "receiving": {
+      "targets": 17,
+      "receptions": 16,
+      "recYards": 99,
+      "recAverage": 6.2,
+      "recTD": 0,
+      "recLng": 71,
+      "rec1stDowns": 4,
+      "rec20Plus": 0,
+      "rec40Plus": 0,
+      "recFumbles": 0
+    },
+    "tackles": {
+      "tackleSolo": 4,
+      "tackleTotal": 4,
+      "tackleAst": 0,
+      "sacks": 0,
+      "sackYds": 0,
+      "tacklesForLoss": 0
+    },
+    "interceptions": {
+      "interceptions": 0,
+      "intTD": 0,
+      "intYds": 0,
+      "intAverage": 0,
+      "intLng": 0,
+      "passesDefended": 0,
+      "stuffs": 0,
+      "stuffYds": 0,
+      "safeties": 0,
+      "kB": 0
+    },
+    "fumbles": {
+      "fumbles": 3,
+      "fumLost": 1,
+      "fumForced": 0,
+      "fumOwnRec": 0,
+      "fumOppRec": 0,
+      "fumRecYds": 0,
+      "fumTotalRec": 2,
+      "fumTD": 0,
+      "offFumTD": 0
+    },
+    "kickoffReturns": {
+      "krRet": 17,
+      "krYds": 552,
+      "krAvg": 32.5,
+      "krLng": 308,
+      "krTD": 0,
+      "kr20Plus": 16,
+      "kr40Plus": 4,
+      "krFC": 0,
+      "krFum": 0
+    },
+    "puntReturns": {
+      "prRet": 0,
+      "prYds": 0,
+      "prAvg": 0,
+      "prLng": 0,
+      "prTD": 0,
+      "pr20Plus": 0,
+      "pr40Plus": 0,
+      "prFC": 0,
+      "prFum": 0
+    },
+    "miscellaneous": {
+      "gamesStarted": 0
+    },
+    "twoPointAttempts": {
+      "twoPtAtt": 0,
+      "twoPtMade": 0,
+      "twoPtPassAtt": 0,
+      "twoPtPassMade": 0,
+      "twoPtPassRec": 0,
+      "twoPtRushAtt": 0,
+      "twoPtRushMade": 0
+    },
+    "snapCounts": {
+      "offenseSnaps": 86,
+      "defenseSnaps": 0,
+      "specialTeamSnaps": 135
+    }
+  }
+}

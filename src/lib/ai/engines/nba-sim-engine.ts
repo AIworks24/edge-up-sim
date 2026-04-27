@@ -263,7 +263,7 @@ export function runNBASimulation(
     best_bet:             bestBet.side,
     best_edge_score:      bestEdge,
     best_confidence_pct:  bestConf,
-    spread_vs_market:     fairSpread - input.spread_home,
+    spread_vs_market:     fairSpread + input.spread_home,
     total_vs_market:      fairTotal  - input.total,
   }
 }

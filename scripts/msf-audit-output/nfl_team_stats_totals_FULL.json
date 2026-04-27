@@ -1,0 +1,224 @@
+{
+  "team": {
+    "id": 76,
+    "city": "Arizona",
+    "name": "Cardinals",
+    "abbreviation": "ARI",
+    "homeVenue": {
+      "id": 43,
+      "name": "State Farm Stadium"
+    },
+    "teamColoursHex": [
+      "#97233f",
+      "#000000",
+      "#ffb612"
+    ],
+    "socialMediaAccounts": [
+      {
+        "mediaType": "TWITTER",
+        "value": "AZCardinals"
+      }
+    ],
+    "officialLogoImageSrc": "https://static.www.nfl.com/league/api/clubs/logos/ARI.svg"
+  },
+  "stats": {
+    "gamesPlayed": 17,
+    "passing": {
+      "passAttempts": 649,
+      "passCompletions": 427,
+      "passPct": 65.8,
+      "passGrossYards": 4363,
+      "passNetYards": 3964,
+      "passAvg": 6.7,
+      "passYardsPerAtt": 5.6,
+      "passTD": 29,
+      "passTDPct": 4.5,
+      "passInt": 11,
+      "passIntPct": 1.7,
+      "passLng": 581,
+      "pass20Plus": 49,
+      "pass40Plus": 5,
+      "passSacks": 59,
+      "passSackY": 399,
+      "qbRating": 92.8
+    },
+    "rushing": {
+      "rushAttempts": 366,
+      "rushYards": 1583,
+      "rushAverage": 4.3,
+      "rushTD": 9,
+      "rushLng": 412,
+      "rush1stDowns": 92,
+      "rush1stDownsPct": 25.1,
+      "rush20Plus": 5,
+      "rush40Plus": 3,
+      "rushFumbles": 5
+    },
+    "receiving": {
+      "receptions": 427,
+      "recYards": 4354,
+      "recAverage": 10.2,
+      "recTD": 29,
+      "recLng": 581,
+      "rec1stDowns": 217,
+      "rec20Plus": 49,
+      "rec40Plus": 5,
+      "recFumbles": 0
+    },
+    "tackles": {
+      "tackleSolo": 617,
+      "tackleTotal": 1192,
+      "tackleAst": 575,
+      "sacks": 30,
+      "sackYds": 219,
+      "tacklesForLoss": 71
+    },
+    "interceptions": {
+      "interceptions": 10,
+      "intTD": 0,
+      "intYds": 51,
+      "intAverage": 5.1,
+      "intLng": 51,
+      "passesDefended": 80,
+      "stuffs": 339,
+      "stuffYds": 371,
+      "kB": 3,
+      "safeties": 0
+    },
+    "fumbles": {
+      "fumbles": 13,
+      "fumLost": 10,
+      "fumForced": 14,
+      "fumOwnRec": 3,
+      "fumOppRec": 9,
+      "fumRecYds": 8,
+      "fumTotalRec": 13,
+      "fumTD": 1
+    },
+    "kickoffReturns": {
+      "krRet": 79,
+      "krYds": 1988,
+      "krAvg": 25.2,
+      "krLng": 536,
+      "krTD": 0,
+      "kr20Plus": 69,
+      "kr40Plus": 1,
+      "krFC": 0,
+      "krFum": 0
+    },
+    "puntReturns": {
+      "prRet": 19,
+      "prYds": 217,
+      "prAvg": 11.4,
+      "prLng": 183,
+      "prTD": 0,
+      "pr20Plus": 4,
+      "pr40Plus": 1,
+      "prFC": 5,
+      "prFum": 0
+    },
+    "fieldGoals": {
+      "fgBlk": 1,
+      "fgMade": 25,
+      "fgAtt": 33,
+      "fgPct": 75.8,
+      "fgMade1_19": 0,
+      "fgAtt1_19": 0,
+      "fg1_19Pct": 0,
+      "fgMade20_29": 5,
+      "fgAtt20_29": 5,
+      "fg20_29Pct": 100,
+      "fgMade30_39": 7,
+      "fgAtt30_39": 8,
+      "fg30_39Pct": 87.5,
+      "fgMade40_49": 7,
+      "fgAtt40_49": 10,
+      "fg40_49Pct": 70,
+      "fgMade50Plus": 6,
+      "fgAtt50Plus": 10,
+      "fg50PlusPct": 60,
+      "fgLng": 572
+    },
+    "extraPointAttempt": {
+      "xpBlk": 0,
+      "xpMade": 36,
+      "xpAtt": 36,
+      "xpPct": 100,
+      "fgAndXpPts": 111
+    },
+    "kickoffs": {
+      "kickoffs": 82,
+      "koYds": 4868,
+      "koOOB": 3,
+      "koAvg": 59.4,
+      "koTB": 20,
+      "koRet": 59,
+      "koRetYds": 1630,
+      "koRetAvgYds": 27.6,
+      "koTD": 0,
+      "koOS": 3,
+      "koOSR": 0
+    },
+    "punting": {
+      "punts": 60,
+      "puntYds": 2927,
+      "puntNetYds": 2564,
+      "puntLng": 929,
+      "puntAvg": 48.8,
+      "puntNetAvg": 42.7,
+      "puntBlk": 0,
+      "puntOOB": 4,
+      "puntDown": 5,
+      "puntIn20": 20,
+      "puntIn20Pct": 33.3,
+      "puntTB": 3,
+      "puntTBPct": 5,
+      "puntFC": 17,
+      "puntRet": 29,
+      "puntRetYds": 363,
+      "puntRetAvg": 12.5
+    },
+    "miscellaneous": {
+      "firstDownsTotal": 332,
+      "firstDownsPass": 216,
+      "firstDownsRush": 91,
+      "firstDownsPenalty": 25,
+      "thirdDowns": 93,
+      "thirdDownsAtt": 224,
+      "thirdDownsPct": 41.5,
+      "fourthDowns": 12,
+      "fourthDownsAtt": 28,
+      "fourthDownsPct": 42.9,
+      "penalties": 115,
+      "penaltyYds": 832,
+      "offensePlays": 1074,
+      "offenseYds": 5538,
+      "offenseAvgYds": 5.2,
+      "totalTD": 39
+    },
+    "standings": {
+      "wins": 3,
+      "losses": 14,
+      "ties": 0,
+      "otWins": 0,
+      "otLosses": 1,
+      "winPct": 0.176,
+      "pointsFor": 355,
+      "pointsAgainst": 488,
+      "pointDifferential": -133
+    },
+    "twoPointAttempts": {
+      "twoPtAtt": 4,
+      "twoPtMade": 1,
+      "twoPtPassAtt": 3,
+      "twoPtPassMade": 1,
+      "twoPtRushAtt": 1,
+      "twoPtRushMade": 0
+    },
+    "snapCounts": {
+      "offenseSnaps": 1135,
+      "defenseSnaps": 1146,
+      "specialTeamSnaps": 379
+    }
+  }
+}

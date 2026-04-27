@@ -1,0 +1,643 @@
+{
+  "first5": [
+    {
+      "schedule": {
+        "id": 148741,
+        "week": 1,
+        "startTime": "2025-09-05T00:20:00.000Z",
+        "endedTime": "2025-09-05T05:15:00.000Z",
+        "awayTeam": {
+          "id": 52,
+          "abbreviation": "DAL"
+        },
+        "homeTeam": {
+          "id": 54,
+          "abbreviation": "PHI"
+        },
+        "venue": {
+          "id": 65,
+          "name": "Lincoln Financial Field"
+        },
+        "venueAllegiance": "HOME",
+        "scheduleStatus": "NORMAL",
+        "originalStartTime": null,
+        "delayedOrPostponedReason": null,
+        "playedStatus": "COMPLETED",
+        "attendance": 69879,
+        "officials": [
+          {
+            "id": 19726,
+            "title": "Line Judge",
+            "firstName": "Jeff",
+            "lastName": "Seeman"
+          },
+          {
+            "id": 19836,
+            "title": "Back Judge",
+            "firstName": "Dino",
+            "lastName": "Paganelli"
+          },
+          {
+            "id": 21972,
+            "title": "Referee",
+            "firstName": "Shawn",
+            "lastName": "Smith"
+          },
+          {
+            "id": 19969,
+            "title": "Field Judge",
+            "firstName": "Dyrol",
+            "lastName": "Prioleau"
+          },
+          {
+            "id": 19964,
+            "title": "Umpire",
+            "firstName": "Bryan",
+            "lastName": "Neale"
+          },
+          {
+            "id": 19460,
+            "title": "Side Judge",
+            "firstName": "Boris",
+            "lastName": "Cheek"
+          },
+          {
+            "id": 477252,
+            "title": "Down Judge",
+            "firstName": "Jay",
+            "lastName": "Bilbo"
+          }
+        ],
+        "broadcasters": [
+          "NBC",
+          "TELEMUNDO",
+          "UNIVERSO",
+          "Peacock"
+        ],
+        "weather": {
+          "type": "RAIN",
+          "description": "moderate rain",
+          "wind": {
+            "speed": {
+              "milesPerHour": 16,
+              "kilometersPerHour": 26
+            },
+            "direction": {
+              "degrees": 188,
+              "label": "SSE"
+            }
+          },
+          "temperature": {
+            "fahrenheit": 77,
+            "celsius": 25
+          },
+          "precipitation": {
+            "type": "RAIN",
+            "percent": null,
+            "amount": {
+              "millimeters": 4,
+              "centimeters": null,
+              "inches": null,
+              "feet": null
+            }
+          },
+          "humidityPercent": 67
+        }
+      },
+      "score": {
+        "currentQuarter": null,
+        "currentQuarterSecondsRemaining": null,
+        "currentIntermission": null,
+        "teamInPossession": null,
+        "currentDown": null,
+        "currentYardsRemaining": null,
+        "lineOfScrimmage": null,
+        "awayScoreTotal": 20,
+        "homeScoreTotal": 24,
+        "quarters": [
+          {
+            "quarterNumber": 1,
+            "awayScore": 7,
+            "homeScore": 7
+          },
+          {
+            "quarterNumber": 2,
+            "awayScore": 13,
+            "homeScore": 14
+          },
+          {
+            "quarterNumber": 3,
+            "awayScore": 0,
+            "homeScore": 3
+          },
+          {
+            "quarterNumber": 4,
+            "awayScore": 0,
+            "homeScore": 0
+          }
+        ]
+      }
+    },
+    {
+      "schedule": {
+        "id": 148742,
+        "week": 1,
+        "startTime": "2025-09-06T00:00:00.000Z",
+        "endedTime": "2025-09-06T04:00:00.000Z",
+        "awayTeam": {
+          "id": 73,
+          "abbreviation": "KC"
+        },
+        "homeTeam": {
+          "id": 75,
+          "abbreviation": "LAC"
+        },
+        "venue": {
+          "id": 1344,
+          "name": "Arena Corinthians"
+        },
+        "venueAllegiance": "NEUTRAL",
+        "scheduleStatus": "NORMAL",
+        "originalStartTime": null,
+        "delayedOrPostponedReason": null,
+        "playedStatus": "COMPLETED",
+        "attendance": 47627,
+        "officials": [
+          {
+            "id": 20376,
+            "title": "Line Judge",
+            "firstName": "Rusty",
+            "lastName": "Baynes"
+          },
+          {
+            "id": 477346,
+            "title": "Back Judge",
+            "firstName": "Martin",
+            "lastName": "Hankins"
+          },
+          {
+            "id": 21751,
+            "title": "Field Judge",
+            "firstName": "Nathan",
+            "lastName": "Jones"
+          },
+          {
+            "id": 19723,
+            "title": "Referee",
+            "firstName": "Carl",
+            "lastName": "Cheffers"
+          },
+          {
+            "id": 500500,
+            "title": "Umpire",
+            "firstName": "Derek",
+            "lastName": "Anderson"
+          },
+          {
+            "id": 19280,
+            "title": "Side Judge",
+            "firstName": "Eugene",
+            "lastName": "Hall"
+          },
+          {
+            "id": 24078,
+            "title": "Down Judge",
+            "firstName": "Daniel",
+            "lastName": "Gallagher"
+          }
+        ],
+        "broadcasters": [
+          "YouTube",
+          "DAZN Canada",
+          "NFL Game Pass on DAZN",
+          "CazeTV"
+        ],
+        "weather": null
+      },
+      "score": {
+        "currentQuarter": null,
+        "currentQuarterSecondsRemaining": null,
+        "currentIntermission": null,
+        "teamInPossession": null,
+        "currentDown": null,
+        "currentYardsRemaining": null,
+        "lineOfScrimmage": null,
+        "awayScoreTotal": 21,
+        "homeScoreTotal": 27,
+        "quarters": [
+          {
+            "quarterNumber": 1,
+            "awayScore": 0,
+            "homeScore": 7
+          },
+          {
+            "quarterNumber": 2,
+            "awayScore": 6,
+            "homeScore": 6
+          },
+          {
+            "quarterNumber": 3,
+            "awayScore": 6,
+            "homeScore": 7
+          },
+          {
+            "quarterNumber": 4,
+            "awayScore": 9,
+            "homeScore": 7
+          }
+        ]
+      }
+    },
+    {
+      "schedule": {
+        "id": 148743,
+        "week": 1,
+        "startTime": "2025-09-07T17:00:00.000Z",
+        "endedTime": "2025-09-07T21:25:00.000Z",
+        "awayTeam": {
+          "id": 71,
+          "abbreviation": "TB"
+        },
+        "homeTeam": {
+          "id": 68,
+          "abbreviation": "ATL"
+        },
+        "venue": {
+          "id": 62,
+          "name": "Mercedes-Benz Stadium"
+        },
+        "venueAllegiance": "HOME",
+        "scheduleStatus": "NORMAL",
+        "originalStartTime": null,
+        "delayedOrPostponedReason": null,
+        "playedStatus": "COMPLETED",
+        "attendance": 71610,
+        "officials": [
+          {
+            "id": 500624,
+            "title": "Line Judge",
+            "firstName": "Jeff",
+            "lastName": "Hutcheon"
+          },
+          {
+            "id": 19459,
+            "title": "Back Judge",
+            "firstName": "Brad",
+            "lastName": "Freeman"
+          },
+          {
+            "id": 22388,
+            "title": "Referee",
+            "firstName": "Vincent",
+            "lastName": "Land Clark"
+          },
+          {
+            "id": 22159,
+            "title": "Field Judge",
+            "firstName": "Jabir",
+            "lastName": "Walker"
+          },
+          {
+            "id": 24082,
+            "title": "Side Judge",
+            "firstName": "Dominique",
+            "lastName": "Pender"
+          },
+          {
+            "id": 19087,
+            "title": "Umpire",
+            "firstName": "Mark",
+            "lastName": "Pellis"
+          },
+          {
+            "id": 19970,
+            "title": "Down Judge",
+            "firstName": "Tom",
+            "lastName": "Stephan"
+          }
+        ],
+        "broadcasters": [
+          "FOX",
+          "DAZN Canada",
+          "RDS",
+          "NFL Game Pass on DAZN",
+          "Sky Sports"
+        ],
+        "weather": {
+          "type": "LIGHT_RAIN",
+          "description": "light rain",
+          "wind": {
+            "speed": {
+              "milesPerHour": 12,
+              "kilometersPerHour": 19
+            },
+            "direction": {
+              "degrees": 316,
+              "label": "NNW"
+            }
+          },
+          "temperature": {
+            "fahrenheit": 74,
+            "celsius": 23
+          },
+          "precipitation": {
+            "type": "RAIN",
+            "percent": null,
+            "amount": {
+              "millimeters": 0,
+              "centimeters": null,
+              "inches": null,
+              "feet": null
+            }
+          },
+          "humidityPercent": 59
+        }
+      },
+      "score": {
+        "currentQuarter": null,
+        "currentQuarterSecondsRemaining": null,
+        "currentIntermission": null,
+        "teamInPossession": null,
+        "currentDown": null,
+        "currentYardsRemaining": null,
+        "lineOfScrimmage": null,
+        "awayScoreTotal": 23,
+        "homeScoreTotal": 20,
+        "quarters": [
+          {
+            "quarterNumber": 1,
+            "awayScore": 0,
+            "homeScore": 7
+          },
+          {
+            "quarterNumber": 2,
+            "awayScore": 10,
+            "homeScore": 3
+          },
+          {
+            "quarterNumber": 3,
+            "awayScore": 7,
+            "homeScore": 3
+          },
+          {
+            "quarterNumber": 4,
+            "awayScore": 6,
+            "homeScore": 7
+          }
+        ]
+      }
+    },
+    {
+      "schedule": {
+        "id": 148744,
+        "week": 1,
+        "startTime": "2025-09-07T17:00:00.000Z",
+        "endedTime": "2025-09-07T20:59:00.000Z",
+        "awayTeam": {
+          "id": 57,
+          "abbreviation": "CIN"
+        },
+        "homeTeam": {
+          "id": 58,
+          "abbreviation": "CLE"
+        },
+        "venue": {
+          "id": 50,
+          "name": "Huntington Bank Field"
+        },
+        "venueAllegiance": "HOME",
+        "scheduleStatus": "NORMAL",
+        "originalStartTime": null,
+        "delayedOrPostponedReason": null,
+        "playedStatus": "COMPLETED",
+        "attendance": 65599,
+        "officials": [
+          {
+            "id": 19093,
+            "title": "Line Judge",
+            "firstName": "Julian",
+            "lastName": "Mapp"
+          },
+          {
+            "id": 19967,
+            "title": "Back Judge",
+            "firstName": "Gregory",
+            "lastName": "Steed"
+          },
+          {
+            "id": 19920,
+            "title": "Referee",
+            "firstName": "Adrian",
+            "lastName": "Hill"
+          },
+          {
+            "id": 410708,
+            "title": "Field Judge",
+            "firstName": "Trawick",
+            "lastName": "Boger"
+          },
+          {
+            "id": 23829,
+            "title": "Side Judge",
+            "firstName": "Clay",
+            "lastName": "Reynard"
+          },
+          {
+            "id": 19318,
+            "title": "Umpire",
+            "firstName": "Roy",
+            "lastName": "Ellison"
+          },
+          {
+            "id": 19088,
+            "title": "Down Judge",
+            "firstName": "Derick",
+            "lastName": "Bowers"
+          }
+        ],
+        "broadcasters": [
+          "FOX",
+          "CTV",
+          "DAZN Canada",
+          "TSN",
+          "NFL Game Pass on DAZN",
+          "RTL+"
+        ],
+        "weather": null
+      },
+      "score": {
+        "currentQuarter": null,
+        "currentQuarterSecondsRemaining": null,
+        "currentIntermission": null,
+        "teamInPossession": null,
+        "currentDown": null,
+        "currentYardsRemaining": null,
+        "lineOfScrimmage": null,
+        "awayScoreTotal": 17,
+        "homeScoreTotal": 16,
+        "quarters": [
+          {
+            "quarterNumber": 1,
+            "awayScore": 7,
+            "homeScore": 0
+          },
+          {
+            "quarterNumber": 2,
+            "awayScore": 7,
+            "homeScore": 10
+          },
+          {
+            "quarterNumber": 3,
+            "awayScore": 3,
+            "homeScore": 6
+          },
+          {
+            "quarterNumber": 4,
+            "awayScore": 0,
+            "homeScore": 0
+          }
+        ]
+      }
+    },
+    {
+      "schedule": {
+        "id": 148745,
+        "week": 1,
+        "startTime": "2025-09-07T17:00:00.000Z",
+        "endedTime": "2025-09-07T20:45:00.000Z",
+        "awayTeam": {
+          "id": 49,
+          "abbreviation": "MIA"
+        },
+        "homeTeam": {
+          "id": 65,
+          "abbreviation": "IND"
+        },
+        "venue": {
+          "id": 56,
+          "name": "Lucas Oil Stadium"
+        },
+        "venueAllegiance": "HOME",
+        "scheduleStatus": "NORMAL",
+        "originalStartTime": null,
+        "delayedOrPostponedReason": null,
+        "playedStatus": "COMPLETED",
+        "attendance": 64065,
+        "officials": [
+          {
+            "id": 479667,
+            "title": "Line Judge",
+            "firstName": "Walter",
+            "lastName": "Flowers"
+          },
+          {
+            "id": 477250,
+            "title": "Back Judge",
+            "firstName": "Tyree",
+            "lastName": "Walton"
+          },
+          {
+            "id": 19223,
+            "title": "Referee",
+            "firstName": "Brad",
+            "lastName": "Allen"
+          },
+          {
+            "id": 20428,
+            "title": "Field Judge",
+            "firstName": "Rick",
+            "lastName": "Patterson"
+          },
+          {
+            "id": 22204,
+            "title": "Umpire",
+            "firstName": "Steven",
+            "lastName": "Woods"
+          },
+          {
+            "id": 22090,
+            "title": "Side Judge",
+            "firstName": "Chad",
+            "lastName": "Hill"
+          },
+          {
+            "id": 21426,
+            "title": "Down Judge",
+            "firstName": "Sarah",
+            "lastName": "Thomas"
+          }
+        ],
+        "broadcasters": [
+          "CBS",
+          "TSN+",
+          "DAZN Canada",
+          "NFL Game Pass on DAZN",
+          "Fox Sports 2"
+        ],
+        "weather": {
+          "type": "SUNNY",
+          "description": "sky is clear",
+          "wind": {
+            "speed": {
+              "milesPerHour": 9,
+              "kilometersPerHour": 14
+            },
+            "direction": {
+              "degrees": 5,
+              "label": "NNE"
+            }
+          },
+          "temperature": {
+            "fahrenheit": 67,
+            "celsius": 19
+          },
+          "precipitation": {
+            "type": null,
+            "percent": null,
+            "amount": {
+              "millimeters": null,
+              "centimeters": null,
+              "inches": null,
+              "feet": null
+            }
+          },
+          "humidityPercent": 34
+        }
+      },
+      "score": {
+        "currentQuarter": null,
+        "currentQuarterSecondsRemaining": null,
+        "currentIntermission": null,
+        "teamInPossession": null,
+        "currentDown": null,
+        "currentYardsRemaining": null,
+        "lineOfScrimmage": null,
+        "awayScoreTotal": 8,
+        "homeScoreTotal": 33,
+        "quarters": [
+          {
+            "quarterNumber": 1,
+            "awayScore": 0,
+            "homeScore": 3
+          },
+          {
+            "quarterNumber": 2,
+            "awayScore": 0,
+            "homeScore": 17
+          },
+          {
+            "quarterNumber": 3,
+            "awayScore": 0,
+            "homeScore": 3
+          },
+          {
+            "quarterNumber": 4,
+            "awayScore": 8,
+            "homeScore": 10
+          }
+        ]
+      }
+    }
+  ],
+  "total": 272
+}
