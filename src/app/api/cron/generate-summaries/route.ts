@@ -23,6 +23,7 @@ export async function GET(req: NextRequest) {
   const authHeader  = req.headers.get('authorization')
   const querySecret = new URL(req.url).searchParams.get('secret')
   const provided    = authHeader?.replace('Bearer ', '') || querySecret
+  const force       = new URL(req.url).searchParams.get('force') === 'true'
 
   if (provided !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -44,8 +45,8 @@ export async function GET(req: NextRequest) {
         .eq('sport_key', sport)
         .single()
 
-      if (existing?.status === 'completed') {
-        console.log(`[generate-summaries] ${sport} already completed today — skipping`)
+      if (existing?.status === 'completed' && !force) {
+        console.log(`[generate-summaries] ${sport} already completed today — skipping (use ?force=true to override)`)
         results[sport] = { skipped: true, games_processed: existing.games_processed }
         continue
       }
