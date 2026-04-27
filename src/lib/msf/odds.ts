@@ -143,10 +143,18 @@ export async function attachOddsToGames(
   const league     = MSF_LEAGUE[sport]
   const candidates = getMSFSeasonCandidates(sport)
 
-  // Collect unique dates
+  // MSF organizes odds by LOCAL game date, not UTC date.
+  // A 10:30pm ET game has UTC date of next day — we must query both dates
+  // to ensure we catch all games regardless of timezone crossover.
   const dateSet = new Set<string>()
   for (const g of games) {
-    if (g.commence_time) dateSet.add(toMSFDate(new Date(g.commence_time)))
+    if (!g.commence_time) continue
+    const utcDate = new Date(g.commence_time)
+    dateSet.add(toMSFDate(utcDate))
+    // Also add the day before UTC (= local US game date for late-night games)
+    const prevDay = new Date(utcDate)
+    prevDay.setUTCDate(prevDay.getUTCDate() - 1)
+    dateSet.add(toMSFDate(prevDay))
   }
 
   const oddsMap = new Map<string, ParsedOdds>()
