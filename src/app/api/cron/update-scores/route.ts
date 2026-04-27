@@ -37,6 +37,10 @@ export async function GET(req: NextRequest) {
   const cutoff = new Date()
   cutoff.setHours(cutoff.getHours() - 4)
 
+  // Ignore predictions older than 60 days — game data no longer available in MSF
+  const staleDate = new Date()
+  staleDate.setDate(staleDate.getDate() - 60)
+
   const { data: pending, error: fetchErr } = await supabaseAdmin
     .from('ai_predictions')
     .select(`
@@ -47,7 +51,9 @@ export async function GET(req: NextRequest) {
     `)
     .is('was_correct', null)
     .lt('game_time', cutoff.toISOString())
+    .gt('game_time', staleDate.toISOString())
     .not('game_time', 'is', null)
+    .order('game_time', { ascending: false })
     .limit(50)
 
   if (fetchErr) {
