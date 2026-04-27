@@ -123,7 +123,7 @@ export async function getUpcomingGames(sport: SportKey, days = 7): Promise<Norma
       try {
         const data  = await msfFetch<any>(league, season, `date/${msfDate}/games`)
         const games = (data.games || []).filter((g: any) =>
-          normalizeStatus(g.schedule?.playedStatus || '') === 'scheduled'
+          normalizeStatus(g.schedule?.playedStatus || '') === 'completed'
         )
         if (games.length > 0) {
           all.push(...games.map((g: any) => normalizeGame(g, sport)))
