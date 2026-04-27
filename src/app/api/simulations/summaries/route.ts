@@ -64,8 +64,8 @@ export async function GET(req: NextRequest) {
         odds_snapshot
       `)
       .eq('prediction_type', 'game_summary')
-      .gte('created_at', `${today}T00:00:00.000Z`)
-      .gt('game_time', new Date().toISOString())
+      .gt('game_time', new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString())
+      .lte('game_time', new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString())
       .order('edge_score', { ascending: false })
 
     if (sport) {
