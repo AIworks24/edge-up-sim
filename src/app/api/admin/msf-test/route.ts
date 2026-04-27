@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
   const apiKey   = process.env.MSF_API_KEY   || 'NOT_SET'
   const password = process.env.MSF_PASSWORD  || 'MYSPORTSFEEDS'
   const auth     = 'Basic ' + Buffer.from(`${apiKey}:${password}`).toString('base64')
-  const url      = 'https://api.mysportsfeeds.com/v2.1/pull/nba/2025-2026-playoff/date/20260427/games.json'
+  const url      = 'https://api.mysportsfeeds.com/v2.1/pull/nba/2025-2026-playoff/date/20260428/games.json'
 
   try {
     const res  = await fetch(url, {
