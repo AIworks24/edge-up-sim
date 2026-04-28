@@ -66,7 +66,8 @@ export async function GET(req: NextRequest) {
       .eq('prediction_type', 'game_summary')
       .gt('game_time', new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString())
       .lte('game_time', new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString())
-      .order('edge_score', { ascending: false })
+      .gte('created_at', new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString())
+      .order('created_at', { ascending: false })
 
     if (sport) {
       query = query.eq('sport', sport)
@@ -80,6 +81,7 @@ export async function GET(req: NextRequest) {
     }
 
     if (!predictions || predictions.length === 0) {
+      
       return NextResponse.json({ summaries: [], count: 0, date: today })
     }
 
