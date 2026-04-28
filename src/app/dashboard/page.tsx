@@ -345,8 +345,8 @@ export default function DashboardPage() {
                   NO_VALUE:    'text-gray-400',
                 }
                 const edgeColor = tierColors[pick.edge_tier] ?? 'text-gray-300'
-                const projHome = pick.projected_home_score?.toFixed(0) ?? '—'
-                const projAway = pick.projected_away_score?.toFixed(0) ?? '—'
+                const projHome = pick.projected_home_score != null ? Number(pick.projected_home_score).toFixed(0) : '—'
+                const projAway = pick.projected_away_score != null ? Number(pick.projected_away_score).toFixed(0) : '—'
 
                 return (
                   <div key={pick.id ?? index} className={`bg-slate-700/30 border rounded-2xl p-6 hover:bg-slate-700/50 hover:border-white/10 transition flex flex-col gap-3 ${
