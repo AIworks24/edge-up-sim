@@ -203,13 +203,13 @@ function SimCard({ pred, onToggleBet, isUpdating }: { pred: any; onToggleBet?: (
             {pred.sim_home_win_pct != null && (
               <div className="bg-slate-700/30 rounded-xl p-3 text-center">
                 <p className="text-xs text-gray-500 mb-1">Home Win%</p>
-                <p className="text-xl font-black text-white">{(pred.sim_home_win_pct * 100).toFixed(0)}%</p>
+                <p className="text-xl font-black text-white">{pred.sim_home_win_pct != null ? (Number(pred.sim_home_win_pct) * 100).toFixed(0) : '—'}%</p>
               </div>
             )}
             {pred.sim_over_pct != null && (
               <div className="bg-slate-700/30 rounded-xl p-3 text-center">
                 <p className="text-xs text-gray-500 mb-1">Over%</p>
-                <p className="text-xl font-black text-white">{(pred.sim_over_pct * 100).toFixed(0)}%</p>
+                <p className="text-xl font-black text-white">{pred.sim_over_pct != null ? (Number(pred.sim_over_pct) * 100).toFixed(0) : '—'}%</p>
               </div>
             )}
           </div>
@@ -246,10 +246,10 @@ function SimCard({ pred, onToggleBet, isUpdating }: { pred: any; onToggleBet?: (
               <span>Total <span className="text-white">{pred.market_total}</span></span>
             )}
             {pred.fair_spread != null && (
-              <span>Fair Spread <span className="text-blue-300">{pred.fair_spread > 0 ? '+' : ''}{pred.fair_spread?.toFixed(1)}</span></span>
+              <span>Fair Spread <span className="text-blue-300">{pred.fair_spread > 0 ? '+' : ''}{pred.fair_spread != null ? Number(pred.fair_spread).toFixed(1) : '—'}</span></span>
             )}
             {pred.fair_total != null && (
-              <span>Fair Total <span className="text-blue-300">{pred.fair_total?.toFixed(1)}</span></span>
+              <span>Fair Total <span className="text-blue-300">{pred.fair_total != null ? Number(pred.fair_total).toFixed(1) : '—'}</span></span>
             )}
           </div>
 
