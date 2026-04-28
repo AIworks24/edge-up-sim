@@ -191,13 +191,13 @@ function SimCard({ pred, onToggleBet, isUpdating }: { pred: any; onToggleBet?: (
             {pred.projected_away_score != null && (
               <div className="bg-slate-700/30 rounded-xl p-3 text-center">
                 <p className="text-xs text-gray-500 mb-1">{pred.away_team?.split(' ').pop()}</p>
-                <p className="text-xl font-black text-white">{pred.projected_away_score?.toFixed(0)}</p>
+                <p className="text-xl font-black text-white">{pred.projected_away_score != null ? Number(pred.projected_away_score).toFixed(0) : '—'}</p>
               </div>
             )}
             {pred.projected_home_score != null && (
               <div className="bg-slate-700/30 rounded-xl p-3 text-center">
                 <p className="text-xs text-gray-500 mb-1">{pred.home_team?.split(' ').pop()}</p>
-                <p className="text-xl font-black text-white">{pred.projected_home_score?.toFixed(0)}</p>
+                <p className="text-xl font-black text-white">{pred.projected_home_score != null ? Number(pred.projected_home_score).toFixed(0) : '—'}</p>
               </div>
             )}
             {pred.sim_home_win_pct != null && (
