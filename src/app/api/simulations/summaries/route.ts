@@ -67,6 +67,8 @@ export async function GET(req: NextRequest) {
       .gt('game_time', new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString())
       .lte('game_time', new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString())
       .gte('created_at', new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString())
+      .not('fair_spread', 'is', null)
+      .not('fair_total', 'is', null)
       .order('created_at', { ascending: false })
 
     if (sport) {

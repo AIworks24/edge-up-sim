@@ -118,6 +118,13 @@ export async function GET(req: NextRequest) {
             continue
           }
 
+          // Skip if either team name is still an abbreviation (stats lookup will fail)
+          const isAbbr = (name: string) => /^[A-Z]{2,3}$/.test(name)
+          if (isAbbr(event.home_team) || isAbbr(event.away_team)) {
+            console.log(`[generate-summaries] unresolved team name for ${event.away_team} @ ${event.home_team} — skipping`)
+            continue
+          }
+
           console.log(`[generate-summaries] Simulating: ${event.away_team} @ ${event.home_team}`)
 
           await runGameSimulation({
