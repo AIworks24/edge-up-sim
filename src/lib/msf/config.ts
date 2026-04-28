@@ -89,6 +89,11 @@ export const NFL_TEAM_NAMES: Record<string, string> = {
 
 // Static NBA team abbreviation → full name map
 export const NBA_TEAM_NAMES: Record<string, string> = {
+  ATL: 'Atlanta Hawks',
+  BKN: 'Brooklyn Nets',         BOS: 'Boston Celtics',
+  CHA: 'Charlotte Hornets',     CHI: 'Chicago Bulls',
+  CLE: 'Cleveland Cavaliers',   DAL: 'Dallas Mavericks',
+  DEN: 'Denver Nuggets',        DET: 'Detroit Pistons',
   GS:  'Golden State Warriors', GSW: 'Golden State Warriors',
   HOU: 'Houston Rockets',       IND: 'Indiana Pacers',
   LAC: 'LA Clippers',           LAL: 'Los Angeles Lakers',
@@ -101,6 +106,8 @@ export const NBA_TEAM_NAMES: Record<string, string> = {
   PHI: 'Philadelphia 76ers',    PHX: 'Phoenix Suns',
   POR: 'Portland Trail Blazers',
   SA:  'San Antonio Spurs',     SAS: 'San Antonio Spurs',
+  SAC: 'Sacramento Kings',      TOR: 'Toronto Raptors',
+  UTA: 'Utah Jazz',             WAS: 'Washington Wizards',
 }
 
 export function getTeamName(abbr: string, sport: SportKey): string {
