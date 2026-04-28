@@ -76,6 +76,7 @@ interface CustomSimParams {
 
 const SPORTS = [
   { key: 'ncaab', name: 'NCAA Basketball', icon: '🏀', description: 'College Basketball' },
+  { key: 'ncaaf', name: 'NCAA Football',   icon: '🏈', description: 'College Football' },
   { key: 'nfl',   name: 'NFL',             icon: '🏈', description: 'National Football League' },
   { key: 'nba',   name: 'NBA',             icon: '🏀', description: 'Pro Basketball' },
 ]
@@ -92,6 +93,12 @@ const SLIDERS: Record<string, Array<{
     { key: 'pace',            label: 'Pace (Possessions)',       min: 60,  max: 82,  step: 0.5, default: 69,  unit: '',   hint: 'Expected possessions per 40 min' },
     { key: 'offensiveRating', label: 'Offensive Rating (ORtg)',  min: 90,  max: 125, step: 0.5, default: 104, unit: '',   hint: 'Points per 100 possessions' },
     { key: 'defensiveRating', label: 'Defensive Rating (DRtg)',  min: 90,  max: 125, step: 0.5, default: 104, unit: '',   hint: 'Points allowed per 100 possessions' },
+  ],
+  ncaaf: [
+    { key: 'totalPoints',     label: 'Total Points O/U',        min: 28,  max: 80,  step: 0.5, default: 50,  unit: 'pts', hint: 'Adjust projected combined score' },
+    { key: 'pace',            label: 'Pace (Plays/Game)',        min: 55,  max: 90,  step: 1,   default: 70,  unit: '',   hint: 'Expected offensive plays per game' },
+    { key: 'offensiveRating', label: 'Offensive Efficiency',    min: 20,  max: 45,  step: 0.5, default: 30,  unit: '',   hint: 'Points per drive' },
+    { key: 'defensiveRating', label: 'Defensive Efficiency',    min: 20,  max: 45,  step: 0.5, default: 30,  unit: '',   hint: 'Points allowed per drive' },
   ],
   nfl: [
     { key: 'totalPoints', label: 'Total Points O/U', min: 28, max: 68, step: 0.5, default: 44, unit: 'pts', hint: 'Adjust projected combined score' },
