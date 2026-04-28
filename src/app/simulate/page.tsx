@@ -432,6 +432,7 @@ export default function SimulatePage() {
   const [liveGames, setLiveGames]         = useState<LiveGame[]>([])
   const [loadingLive, setLoadingLive]     = useState(false)
   const [showFallback, setShowFallback]   = useState(false)
+  const [sortBy, setSortBy]               = useState<'edge' | 'time'>('edge')
 
   // Modal + simulation state
   const [modalGame, setModalGame]         = useState<GameSummary | LiveGame | null>(null)
@@ -676,11 +677,30 @@ export default function SimulatePage() {
               <>
                 <div className="flex items-center justify-between">
                   <p className="text-sm text-gray-400">
-                    <span className="text-white font-bold">{summaries.length}</span> games · sorted by highest edge
+                    <span className="text-white font-bold">{summaries.length}</span> games
                   </p>
+                  <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-1">
+                    <button
+                      onClick={() => setSortBy('edge')}
+                      className={`px-3 py-1 rounded-md text-xs font-semibold transition ${sortBy === 'edge' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                    >
+                      Top Edge
+                    </button>
+                    <button
+                      onClick={() => setSortBy('time')}
+                      className={`px-3 py-1 rounded-md text-xs font-semibold transition ${sortBy === 'time' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                    >
+                      Game Time
+                    </button>
+                  </div>
                 </div>
                 <div className="space-y-4">
-                  {summaries.map(s => (
+                  {[...summaries]
+                    .sort((a, b) => sortBy === 'edge'
+                      ? b.edge_score - a.edge_score
+                      : new Date(a.game_time).getTime() - new Date(b.game_time).getTime()
+                    )
+                    .map(s => (
                     <GameSummaryCard
                       key={s.id}
                       summary={s}
