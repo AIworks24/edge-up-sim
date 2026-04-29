@@ -44,6 +44,14 @@ export interface NBASimParams {
   w_Season:     number   // 0.45 (NBA: recent form matters more)
   w_Last10:     number   // 0.55
   w_Style:      number   // 0.12
+  // Playoff adjustment factors (applied when input.is_playoff = true)
+  Playoff_Pace_Factor:      number  // 0.960 — -4% possessions, tighter rotations
+  Playoff_SD_Factor:        number  // 1.05  — slightly more game-to-game variance
+  Playoff_Corr_Bump:        number  // 0.05  — tighter games = higher score correlation
+  Playoff_Blowout_Spread_1: number  // 6     — blowout suppression threshold 1
+  Playoff_Blowout_Factor_1: number  // 0.97  — mean pts multiplier when |spread| >= 6
+  Playoff_Blowout_Spread_2: number  // 10    — blowout suppression threshold 2
+  Playoff_Blowout_Factor_2: number  // 0.95  — mean pts multiplier when |spread| >= 10
 }
 
 export const NBA_PARAMS: NBASimParams = {
@@ -69,6 +77,14 @@ export const NBA_PARAMS: NBASimParams = {
   w_Season:     0.65,
   w_Last10:     0.35,
   w_Style:      0.12,
+  // Playoff factors
+  Playoff_Pace_Factor:      0.960,
+  Playoff_SD_Factor:        1.05,
+  Playoff_Corr_Bump:        0.05,
+  Playoff_Blowout_Spread_1: 6,
+  Playoff_Blowout_Factor_1: 0.97,
+  Playoff_Blowout_Spread_2: 10,
+  Playoff_Blowout_Factor_2: 0.95,
 }
 
 // ── Stat helpers (identical to CBB engine) ────────────────────────────────────
@@ -136,7 +152,9 @@ export function runNBASimulation(
 
   // STEP 2 — Expected Possessions (same formula as CBB, no neutral site) ────
   // 0.65 × avg(Pace_H, Pace_A) + 0.35 × min(Pace_H, Pace_A)
-  const expPoss = 0.65 * ((homeW.Pace + awayW.Pace) / 2) + 0.35 * Math.min(homeW.Pace, awayW.Pace)
+  // Playoff: apply -4% pace factor — tighter rotations reduce possessions
+  const rawExpPoss = 0.65 * ((homeW.Pace + awayW.Pace) / 2) + 0.35 * Math.min(homeW.Pace, awayW.Pace)
+  const expPoss    = input.is_playoff ? rawExpPoss * P.Playoff_Pace_Factor : rawExpPoss
 
   // STEP 3 — Points Per Possession ─────────────────────────────────────────
   // Same formula as CBB: (ORtg + (OppDRtg − NatAvg)) / 100
@@ -157,8 +175,14 @@ export function runNBASimulation(
   const awayStyleAdj = styleAdj(awayW)
 
   // STEP 5 — Mean Points (HCA always applied for NBA) ───────────────────────
-  const homeMean = expPoss * homePPP + homeStyleAdj + P.HCA_Points
-  const awayMean = expPoss * awayPPP + awayStyleAdj
+  // Playoff blowout suppression: large-spread games trend toward pace collapse
+  // =IF(ABS(Spread)>=10, 0.95, IF(ABS(Spread)>=6, 0.97, 1.0))
+  const blowoutFactor = !input.is_playoff ? 1.0
+    : Math.abs(input.spread_home) >= P.Playoff_Blowout_Spread_2 ? P.Playoff_Blowout_Factor_2
+    : Math.abs(input.spread_home) >= P.Playoff_Blowout_Spread_1 ? P.Playoff_Blowout_Factor_1
+    : 1.0
+  const homeMean = (expPoss * homePPP + homeStyleAdj + P.HCA_Points) * blowoutFactor
+  const awayMean = (expPoss * awayPPP + awayStyleAdj) * blowoutFactor
 
   // STEP 6 — Standard Deviation ─────────────────────────────────────────────
   // Same formula as CBB — raw signed deviations, no neutral site SD factor
@@ -172,12 +196,14 @@ export function runNBASimulation(
         P.k_SD_ORB  * (w.ORB      - P.NatAvg_ORB)
       )
     )
-  const homeSD = calcSD(homeW)
-  const awaySD = calcSD(awayW)
+  const playoffSDFactor = input.is_playoff ? P.Playoff_SD_Factor : 1.0
+  const homeSD = calcSD(homeW) * playoffSDFactor
+  const awaySD = calcSD(awayW) * playoffSDFactor
 
   // STEP 7 — Score Correlation ──────────────────────────────────────────────
-  // No neutral site bump
-  const corr     = Math.min(0.55, Math.max(0.05, P.Corr_Base))
+  // Playoff: tighter defensive games = slightly higher score correlation
+  const corrBase = input.is_playoff ? P.Corr_Base + P.Playoff_Corr_Bump : P.Corr_Base
+  const corr     = Math.min(0.55, Math.max(0.05, corrBase))
   const corrTerm = Math.sqrt(1 - corr * corr)
 
   // STEP 8 — Monte Carlo (20,000 iterations) ────────────────────────────────

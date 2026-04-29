@@ -79,6 +79,12 @@ export interface SimulationOutput {
   sport:            string
 }
 
+// Detect NBA playoff window using same logic as getMSFSeasonCandidates
+function isNBAPlayoffWindow(): boolean {
+  const month = new Date().getMonth() + 1
+  return month >= 4 && month <= 6
+}
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 export async function runGameSimulation(req: SimulationRequest): Promise<SimulationOutput> {
 
@@ -128,6 +134,7 @@ export async function runGameSimulation(req: SimulationRequest): Promise<Simulat
     odds_ml_home: req.odds_ml_home || -150,
     odds_ml_away: req.odds_ml_away || +130,
     neutral_site: req.neutral_site,
+    is_playoff:   req.sport === 'nba' && isNBAPlayoffWindow(),
   }
 
   // 3. Run simulation — NBA uses NBA_PARAMS and no neutral site factor

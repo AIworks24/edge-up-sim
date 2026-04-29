@@ -95,6 +95,7 @@ export interface CBBGameInput {
   odds_ml_home: number    // American ML home
   odds_ml_away: number    // American ML away
   neutral_site: boolean
+  is_playoff?:  boolean   // NBA playoffs: applies pace/PPP suppression
 }
 
 export type BetSide = 'spread_home' | 'spread_away' | 'over' | 'under' | 'ml_home' | 'ml_away' | 'none'
