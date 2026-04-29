@@ -122,7 +122,7 @@ function parseGameEntry(entry: any): ParsedOdds {
     }
   }
 
-  result.spread_home      = median(spreads)
+  result.spread_home      = median(spreads) !== null ? roundToHalf(median(spreads)!) : null
   result.spread_home_odds = median(spreadHomeJuice)
   result.spread_away_odds = median(spreadAwayJuice)
   result.total            = median(totals) !== null ? roundToHalf(median(totals)!) : null
