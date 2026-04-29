@@ -107,6 +107,16 @@ export async function GET(req: NextRequest) {
             continue
           }
 
+          // If forcing a re-run, delete ALL existing summaries for this event
+          // (not just today's) so the 2-day lookback window doesn't show stale data
+          if (force) {
+            await supabaseAdmin
+              .from('ai_predictions')
+              .delete()
+              .eq('event_id', event.id)
+              .eq('prediction_type', 'game_summary')
+          }
+
           // Parse odds — stored as flat object
           const o = typeof event.odds_data === 'string'
             ? JSON.parse(event.odds_data)
