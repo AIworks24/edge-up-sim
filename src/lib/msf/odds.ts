@@ -33,6 +33,7 @@
 import { msfFetch }                          from './client'
 import { NormalizedGame }                    from './games'
 import { SportKey, MSF_LEAGUE, getMSFSeason, getMSFSeasonCandidates } from './config'
+import { roundToHalf } from '@/lib/utils/format'
 
 interface ParsedOdds {
   spread_home:      number | null
@@ -124,7 +125,7 @@ function parseGameEntry(entry: any): ParsedOdds {
   result.spread_home      = median(spreads)
   result.spread_home_odds = median(spreadHomeJuice)
   result.spread_away_odds = median(spreadAwayJuice)
-  result.total            = median(totals)
+  result.total            = median(totals) !== null ? roundToHalf(median(totals)!) : null
   result.total_over_odds  = median(overJuice)
   result.total_under_odds = median(underJuice)
   result.moneyline_home   = median(homeMl)

@@ -20,6 +20,7 @@ import {
   ChevronDown, TrendingUp, Zap, Target,
 } from 'lucide-react'
 import { SimResultCard } from '@/components/simulation/SimResultCard'
+import { formatTotal } from '@/lib/utils/format'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -357,7 +358,7 @@ function GameSummaryCard({ summary, onClick }: { summary: GameSummary; onClick: 
           <span>Spread: Fair <span className="text-blue-300">{summary.fair_spread > 0 ? '+' : ''}{summary.fair_spread?.toFixed(1)}</span> vs mkt <span className="text-white">{summary.market_spread > 0 ? '+' : ''}{summary.market_spread}</span></span>
         )}
         {summary.fair_total != null && summary.market_total != null && (
-          <span>Total: Fair <span className="text-blue-300">{summary.fair_total?.toFixed(1)}</span> vs <span className="text-white">{summary.market_total}</span></span>
+          <span>Total: Fair <span className="text-blue-300">{formatTotal(summary.fair_total)}</span> vs <span className="text-white">{summary.market_total}</span></span>
         )}
       </div>
 

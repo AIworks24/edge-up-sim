@@ -9,6 +9,7 @@ import {
   CheckCircle2, XCircle, Trophy, BarChart3,
   ChevronDown, ChevronUp, Calendar, Bookmark
 } from 'lucide-react'
+import { formatTotal } from '@/lib/utils/format'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function edgeBadge(tier: string) {
@@ -249,7 +250,7 @@ function SimCard({ pred, onToggleBet, isUpdating }: { pred: any; onToggleBet?: (
               <span>Fair Spread <span className="text-blue-300">{pred.fair_spread > 0 ? '+' : ''}{pred.fair_spread != null ? Number(pred.fair_spread).toFixed(1) : '—'}</span></span>
             )}
             {pred.fair_total != null && (
-              <span>Fair Total <span className="text-blue-300">{pred.fair_total != null ? Number(pred.fair_total).toFixed(1) : '—'}</span></span>
+              <span>Fair Total <span className="text-blue-300">{pred.fair_total != null ? formatTotal(Number(pred.fair_total)) : '—'}</span></span>
             )}
           </div>
 

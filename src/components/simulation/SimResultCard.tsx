@@ -14,6 +14,7 @@ import { useState } from 'react'
 import type { SimulationOutput, BetSection } from '@/lib/ai/claude-agent'
 import { EdgeScoreBadge } from '@/components/ui/EdgeScoreBadge'
 import { classifyEdgeScore } from '@/lib/ai/edge-classifier'
+import { formatTotal } from '@/lib/utils/format'
 
 interface SimResultCardProps {
   result: SimulationOutput
@@ -277,7 +278,7 @@ export function SimResultCard({ result }: SimResultCardProps) {
           {expanded && (
             <div className="mt-3 bg-slate-950 rounded-xl p-4 font-mono text-xs text-gray-500 space-y-1">
               <div>Home Win: {(sim.home_win_pct * 100).toFixed(1)}%  |  Cover: {(sim.home_cover_pct * 100).toFixed(1)}%  |  Over: {(sim.over_pct * 100).toFixed(1)}%</div>
-              <div>Fair Spread: {sim.fair_spread.toFixed(1)}  |  Fair Total: {sim.fair_total.toFixed(1)}  |  Fair ML: {sim.fair_moneyline_home}</div>
+              <div>Fair Spread: {sim.fair_spread.toFixed(1)}  |  Fair Total: {formatTotal(sim.fair_total)}  |  Fair ML: {sim.fair_moneyline_home}</div>
               <div>Exp Poss: {sim.expected_possessions.toFixed(1)}  |  Home PPP: {sim.home_ppp.toFixed(4)}  |  Away PPP: {sim.away_ppp.toFixed(4)}</div>
               <div>Home Mean: {sim.home_mean_pts.toFixed(1)} ±{sim.home_sd.toFixed(1)}  |  Away Mean: {sim.away_mean_pts.toFixed(1)} ±{sim.away_sd.toFixed(1)}</div>
               <div>Home ORtg/DRtg: {sim.home_weighted.ORtg}/{sim.home_weighted.DRtg}  |  Away ORtg/DRtg: {sim.away_weighted.ORtg}/{sim.away_weighted.DRtg}</div>

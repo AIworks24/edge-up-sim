@@ -193,3 +193,13 @@ export function formatWinRate(wins: number, total: number): string {
   if (total === 0) return '0.0%'
   return ((wins / total) * 100).toFixed(1) + '%'
 }
+
+export function roundToHalf(n: number): number {
+  return Math.round(n * 2) / 2
+}
+
+export function formatTotal(n: number | null | undefined): string {
+  if (n == null) return '—'
+  const rounded = roundToHalf(n)
+  return rounded % 1 === 0 ? rounded.toString() : rounded.toFixed(1)
+}
