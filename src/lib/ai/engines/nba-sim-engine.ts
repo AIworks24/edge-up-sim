@@ -64,7 +64,7 @@ export const NBA_PARAMS: NBASimParams = {
   NatAvg_ORB:   0.26,
   HCA_Points:   2.5,
   Sims_N:       20000,
-  Base_SD:      11.0,
+  Base_SD:      11.5,
   Corr_Base:    0.22,
   k_SD_3PAR:    0.55,
   k_SD_TOV:     0.30,
@@ -79,7 +79,7 @@ export const NBA_PARAMS: NBASimParams = {
   w_Style:      0.12,
   // Playoff factors
   Playoff_Pace_Factor:      0.960,
-  Playoff_SD_Factor:        1.05,
+  Playoff_SD_Factor:        1.10,
   Playoff_Corr_Bump:        0.05,
   Playoff_Blowout_Spread_1: 6,
   Playoff_Blowout_Factor_1: 0.97,
@@ -178,6 +178,7 @@ export function runNBASimulation(
   // Playoff blowout suppression: large-spread games trend toward pace collapse
   // =IF(ABS(Spread)>=10, 0.95, IF(ABS(Spread)>=6, 0.97, 1.0))
   const blowoutFactor = !input.is_playoff ? 1.0
+    : Math.abs(input.spread_home) >= 15                          ? 0.960   // extreme blowout
     : Math.abs(input.spread_home) >= P.Playoff_Blowout_Spread_2 ? P.Playoff_Blowout_Factor_2
     : Math.abs(input.spread_home) >= P.Playoff_Blowout_Spread_1 ? P.Playoff_Blowout_Factor_1
     : 1.0
@@ -197,8 +198,19 @@ export function runNBASimulation(
       )
     )
   const playoffSDFactor = input.is_playoff ? P.Playoff_SD_Factor : 1.0
-  const homeSD = calcSD(homeW) * playoffSDFactor
-  const awaySD = calcSD(awayW) * playoffSDFactor
+
+  // Dynamic SD adjustments — pace and spread sensitivity
+  // Slow pace (<96) = fewer possessions = tighter outcome range
+  // Fast pace (>100) = more possessions = wider outcome range
+  // Large spread (>10) = blowout potential = wider distribution
+  // Tight spread (<3)  = evenly matched = slightly tighter distribution
+  const paceFactor   = expPoss < 96  ? 0.95 : expPoss > 100 ? 1.05 : 1.0
+  const spreadFactor = Math.abs(input.spread_home) > 10 ? 1.08
+                     : Math.abs(input.spread_home) < 3  ? 0.97
+                     : 1.0
+
+  const homeSD = calcSD(homeW) * playoffSDFactor * paceFactor * spreadFactor
+  const awaySD = calcSD(awayW) * playoffSDFactor * paceFactor * spreadFactor
 
   // STEP 7 — Score Correlation ──────────────────────────────────────────────
   // Playoff: tighter defensive games = slightly higher score correlation
