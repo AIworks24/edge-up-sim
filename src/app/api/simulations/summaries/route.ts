@@ -87,12 +87,31 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ summaries: [], count: 0, date: today })
     }
 
+    // ── Dedup: keep only the freshest prediction per game ──────────────────
+    // The 2-day lookback window surfaces yesterday's AND today's summaries for
+    // the same event. predictions are already sorted created_at DESC, so the
+    // first occurrence of each event_id (or home+away pair) is the freshest.
+    const seenEventIds = new Set<string>()
+    const seenGameKeys = new Set<string>()
+    const uniquePredictions = predictions.filter(pred => {
+      if (pred.event_id) {
+        if (seenEventIds.has(pred.event_id)) return false
+        seenEventIds.add(pred.event_id)
+        return true
+      }
+      // Fallback for older rows without event_id
+      const key = `${pred.home_team}||${pred.away_team}`
+      if (seenGameKeys.has(key)) return false
+      seenGameKeys.add(key)
+      return true
+    })
+
     // ── Step 2: Look up SR IDs + odds_data from sports_events ──────────────
     // Try by event_id first (works for rows written after the storePrediction fix).
     // Fall back to matching by home_team + away_team for older rows.
 
-    const eventIds     = predictions.map(p => p.event_id).filter(Boolean)
-    const homeTeams    = predictions.map(p => p.home_team)
+    const eventIds     = uniquePredictions.map(p => p.event_id).filter(Boolean)
+    const homeTeams    = uniquePredictions.map(p => p.home_team)
 
     // Fetch matching sports_events rows
     const { data: events } = await supabaseAdmin
@@ -113,7 +132,7 @@ export async function GET(req: NextRequest) {
     }
 
     // ── Step 3: Merge and shape response ───────────────────────────────────
-    const summaries = predictions.map(pred => {
+    const summaries = uniquePredictions.map(pred => {
       // Prefer lookup by event_id, fall back to home_team match
       const ev = (pred.event_id && eventById[pred.event_id])
         ? eventById[pred.event_id]
