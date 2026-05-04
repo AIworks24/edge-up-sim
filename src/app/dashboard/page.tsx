@@ -29,6 +29,7 @@ import {
   Star
 } from 'lucide-react'
 import { MetricsBar } from '@/components/dashboard/MetricsBar'
+import { softCapEdgeScore, classifyEdgeScore } from '@/lib/ai/edge-classifier'
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -344,7 +345,9 @@ export default function DashboardPage() {
                   RISKY:       'text-orange-300',
                   NO_VALUE:    'text-gray-400',
                 }
-                const edgeColor = tierColors[pick.edge_tier] ?? 'text-gray-300'
+                const displayEdge = softCapEdgeScore(pick.edge_score ?? 0)
+                const displayTier = classifyEdgeScore(displayEdge).tier
+                const edgeColor = tierColors[displayTier] ?? 'text-gray-300'
                 const projHome = pick.projected_home_score != null ? Number(pick.projected_home_score).toFixed(0) : '—'
                 const projAway = pick.projected_away_score != null ? Number(pick.projected_away_score).toFixed(0) : '—'
 
@@ -359,14 +362,14 @@ export default function DashboardPage() {
 
                     <div className="flex items-center justify-between">
                       <span className={`text-2xl font-black ${edgeColor}`}>
-                        {pick.edge_score?.toFixed(1)}%
+                        {displayEdge.toFixed(1)}%
                       </span>
                       <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
                         isBet
                           ? 'bg-green-500/20 text-green-300 border border-green-500/30'
                           : 'bg-slate-600/50 text-gray-400'
                       }`}>
-                        {pick.edge_tier ?? 'N/A'}
+                        {displayTier}
                       </span>
                     </div>
 

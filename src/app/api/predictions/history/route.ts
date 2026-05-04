@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
       prediction_type, is_daily_pick, daily_pick_rank,
       was_correct, actual_winner, actual_score,
       user_feedback, odds_snapshot,
-      user_placed_bet, bet_placed_at, custom_simulation_params
+      user_placed_bet, bet_placed_at, custom_simulation_params,
       full_response
     `)
     .eq('requested_by', user.id)
