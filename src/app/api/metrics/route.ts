@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin }            from '@/lib/database/supabase-admin'
+import { softCapEdgeScore } from '@/lib/ai/edge-classifier'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -58,7 +59,7 @@ export async function GET(req: NextRequest) {
     ? Math.round(((wins * 100 - losses * 110) / (resolved.length * 110)) * 1000) / 10
     : 0
 
-  const avgEdge       = avg(preds.map(p => p.edge_score       ?? 0))
+  const avgEdge       = avg(preds.map(p => softCapEdgeScore(p.edge_score ?? 0)))
   const avgConfidence = avg(preds.map(p => p.confidence_score ?? 0))
 
   // ── Hot picks segment ─────────────────────────────────────────────────────
@@ -69,7 +70,7 @@ export async function GET(req: NextRequest) {
   const hpWinRate  = hpResolved.length > 0
     ? Math.round((hpWins / hpResolved.length) * 1000) / 10
     : 0
-  const hpAvgEdge  = avg(hp.map(p => p.edge_score ?? 0))
+  const hpAvgEdge  = avg(hp.map(p => softCapEdgeScore(p.edge_score ?? 0)))
 
   // ── By sport ──────────────────────────────────────────────────────────────
   const sportMap: Record<string, { total: number; wins: number; losses: number }> = {}

@@ -10,6 +10,7 @@ import {
   ChevronDown, ChevronUp, Calendar, Bookmark
 } from 'lucide-react'
 import { formatTotal } from '@/lib/utils/format'
+import { softCapEdgeScore } from '@/lib/ai/edge-classifier'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function edgeBadge(tier: string) {
@@ -359,14 +360,15 @@ export default function HistoryPage() {
       setSimulations(data.simulations || [])
       setHotPicks(data.hot_picks || [])
 
-      // Calculate stats from user's own simulations
-      const resolved = (data.simulations || []).filter((p: any) => p.was_correct !== null)
+      // Stats: only user_simulation rows (their tracked games, not global hot picks)
+      const userSims = (data.simulations || []).filter((p: any) => p.prediction_type === 'user_simulation')
+      const resolved = userSims.filter((p: any) => p.was_correct !== null)
       const correct  = resolved.filter((p: any) => p.was_correct === true).length
-      const edges    = (data.simulations || []).map((p: any) => p.edge_score || 0)
+      const edges    = userSims.map((p: any) => softCapEdgeScore(p.edge_score || 0))
       const avgEdge  = edges.length ? edges.reduce((a: number, b: number) => a + b, 0) / edges.length : 0
 
       setStats({
-        total:   data.simulations?.length || 0,
+        total:   userSims.length,
         correct,
         winRate: resolved.length ? Math.round((correct / resolved.length) * 100) : 0,
         avgEdge: Math.round(avgEdge * 10) / 10,

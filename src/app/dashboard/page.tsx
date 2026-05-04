@@ -81,7 +81,12 @@ export default function DashboardPage() {
 
   const loadHotPicks = async () => {
     try {
-      const res = await fetch('/api/predictions/hot-picks')
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers: Record<string, string> = {}
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
+      const res = await fetch('/api/predictions/hot-picks', { headers })
       if (!res.ok) return
       const data = await res.json()
       setHotPicks(data.picks ?? [])
