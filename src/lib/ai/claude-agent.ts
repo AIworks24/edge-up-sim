@@ -10,7 +10,7 @@ import {
 } from './engines/cbb-sim-engine'
 import { runNBASimulation, NBA_PARAMS } from './engines/nba-sim-engine'
 import { getTeamStats } from '../msf/stats'
-import { classifyEdgeScore, RECOMMENDATION_THRESHOLD } from './edge-classifier'
+import { classifyEdgeScore, softCapEdgeScore, getEdgeType, RECOMMENDATION_THRESHOLD } from './edge-classifier'
 import { EDGE_UP_SIM_SYSTEM_PROMPT } from './prompts/system-prompt'
 import { supabaseAdmin } from '../database/supabase-admin'
 
@@ -72,6 +72,7 @@ export interface SimulationOutput {
   // Raw outputs for UI / storage
   edge_up_score:    number
   edge_tier:        string
+  edge_type?:       string
   confidence:       number
   recommendation:   'BET' | 'NO BET'
   sim_results:      CBBSimResults
@@ -152,7 +153,7 @@ export async function runGameSimulation(req: SimulationRequest): Promise<Simulat
 
   // 5. Parse Claude response
   const rawText = message.content[0].type === 'text' ? message.content[0].text : '{}'
-  let aiOutput: Omit<SimulationOutput, 'sim_results' | 'prediction_id' | 'sport' | 'edge_up_score' | 'edge_tier' | 'confidence' | 'recommendation'>
+  let aiOutput: Omit<SimulationOutput, 'sim_results' | 'prediction_id' | 'sport' | 'edge_up_score' | 'edge_tier' | 'edge_type' | 'confidence' | 'recommendation'>
 
   try {
     const cleaned = rawText.replace(/```json\n?|\n?```/g, '').trim()
@@ -174,11 +175,18 @@ export async function runGameSimulation(req: SimulationRequest): Promise<Simulat
   if (aiOutput.key_factors)           aiOutput.key_factors = aiOutput.key_factors.map(expandAcronyms)
 
   // 6. Attach meta
-  const edgeClass = classifyEdgeScore(sim.best_edge_score)
+  const edgeClass    = classifyEdgeScore(sim.best_edge_score)
+  const displayScore = softCapEdgeScore(sim.best_edge_score)
+  const bestBet      = sim.bets[sim.best_bet as keyof typeof sim.bets]
+  const edgeType     = getEdgeType(
+    aiOutput?.top_pick?.bet_category ?? 'spread',
+    bestBet?.win_pct ?? 0.5
+  )
   const output: SimulationOutput = {
     ...aiOutput,
-    edge_up_score:  Math.round(sim.best_edge_score * 10) / 10,
+    edge_up_score:  Math.round(displayScore * 10) / 10,
     edge_tier:      edgeClass.tier,
+    edge_type:      edgeType.label,
     confidence:     Math.round(sim.best_confidence_pct * 10) / 10,
     recommendation: sim.best_edge_score >= RECOMMENDATION_THRESHOLD.MIN_EDGE_SCORE ? 'BET' : 'NO BET',
     sim_results:    sim,
@@ -195,8 +203,11 @@ export async function runGameSimulation(req: SimulationRequest): Promise<Simulat
 function buildPrompt(req: SimulationRequest, sim: CBBSimResults, customParams?: CustomSimParams): string {
   const { bets } = sim
   const f  = (n: number, d = 1) => n.toFixed(d)
-  const fp = (n: number)        => `${(n * 100).toFixed(1)}%`
+  const fp = (n: number)        => `${Math.min(n * 100, 68).toFixed(1)}%`
   const fo = (n: number)        => (n > 0 ? `+${n}` : `${n}`)
+  const displayEdgeScore = softCapEdgeScore(sim.best_edge_score)
+  const bestBetWinPct    = sim.bets[sim.best_bet as keyof typeof sim.bets]?.win_pct ?? 0.5
+  const isLongshotPlay   = bestBetWinPct < 0.45
 
   return `
 ## GAME: ${req.away_team} @ ${req.home_team}
@@ -376,7 +387,7 @@ OUTPUT: Return ONLY the JSON object below. No markdown fences. No text before or
     "label": "<best bet label>",
     "verdict": "${sim.best_edge_score >= RECOMMENDATION_THRESHOLD.MIN_EDGE_SCORE ? 'BET' : 'PASS'}",
     "win_pct": <number>,
-    "edge_pct": ${f(sim.best_edge_score)},
+    "edge_pct": ${f(displayEdgeScore)},
     "odds": <number>,
     "fair_line": "<string>",
     "analysis": "<2-3 sentences: why this is the top bet, what stat drives it, sizing recommendation>"
@@ -475,9 +486,14 @@ function buildFallback(sim: CBBSimResults, req: SimulationRequest) {
       `Fair total ${f(sim.fair_total)} vs market ${req.total} — ${f(Math.abs(sim.total_vs_market), 2)}-pt ${sim.total_vs_market > 0 ? 'over' : 'under'} pressure`,
       `Pace ${f(sim.expected_possessions)} possessions — ${sim.expected_possessions > 69 ? 'above average, adds scoring variance' : 'below average, limits total ceiling'}`,
     ],
-    sizing_note: sim.best_edge_score >= 28 ? 'Exceptional edge — full unit recommended.' :
-                 sim.best_edge_score >= 20 ? 'Strong edge — standard unit recommended.' :
-                 'Edge below threshold — no bet or minimal sizing.',
+    sizing_note: (() => {
+      const bestBetData = sim.bets[sim.best_bet as keyof typeof sim.bets]
+      const isLongshot  = bestBetData ? bestBetData.win_pct < 0.45 : false
+      if (isLongshot)                    return 'Value-driven underdog with high variance — reduced unit sizing recommended.'
+      if (sim.best_edge_score >= 28)     return 'Strong model conviction — consider standard sizing.'
+      if (sim.best_edge_score >= 20)     return 'Meaningful edge identified — moderate sizing appropriate.'
+      return 'Edge below threshold — pass or minimal exposure.'
+    })(),
   }
 }
 

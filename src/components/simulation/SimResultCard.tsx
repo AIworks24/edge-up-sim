@@ -170,8 +170,15 @@ export function SimResultCard({ result }: SimResultCardProps) {
         }`}>
           <div className="flex items-start justify-between gap-4">
             <div>
-              <div className="text-xs text-gray-400 uppercase tracking-wider mb-1">
-                {isBet ? '🏆 Top Pick' : 'Best Available'}
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs text-gray-400 uppercase tracking-wider">
+                  {isBet ? '🏆 Top Pick' : 'Best Available'}
+                </span>
+                {result.edge_type && (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-gray-300 font-medium">
+                    {result.edge_type}
+                  </span>
+                )}
               </div>
               <div className={`text-xl font-black ${isBet ? 'text-green-300' : 'text-gray-200'}`}>
                 {tp.label}
@@ -184,7 +191,9 @@ export function SimResultCard({ result }: SimResultCardProps) {
               <div className={`text-2xl font-black ${isBet ? 'text-green-300' : 'text-gray-300'}`}>
                 {tp.edge_pct >= 0 ? '+' : ''}{tp.edge_pct.toFixed(1)}%
               </div>
-              <div className="text-xs text-gray-500">{result.confidence.toFixed(1)}% confidence</div>
+              <div className="text-xs text-gray-500">
+                {result.confidence >= 65 ? 'High model conviction' : result.confidence >= 55 ? 'Moderate model conviction' : 'Low model conviction'}
+              </div>
             </div>
           </div>
 

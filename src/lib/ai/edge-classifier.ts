@@ -73,3 +73,31 @@ export const RECOMMENDATION_THRESHOLD = {
   MIN_CONFIDENCE: 55,        // Simulation win probability floor
   HOT_PICK_MIN_EDGE: 20,    // Only feature picks with 20%+ edge
 }
+
+/**
+ * Soft cap for display only — raw score stays in DB for sorting/ranking
+ * 0–15%:  shown as-is
+ * 15–30%: compressed (×0.80 above 15)
+ * 30%+:   flattened (×0.08 above 30) → 96% becomes ~32%
+ */
+export function softCapEdgeScore(raw: number): number {
+  if (raw <= 15) return raw
+  if (raw <= 30) return 15 + (raw - 15) * 0.80
+  return 27 + (raw - 30) * 0.08
+}
+
+/**
+ * Returns edge type label based on bet category and win probability
+ */
+export function getEdgeType(
+  betCategory: 'spread' | 'total' | 'moneyline',
+  winPct: number
+): { label: string; isLongshot: boolean } {
+  if (betCategory === 'moneyline' && winPct < 0.45) {
+    return { label: '⚠️ Longshot Value Edge', isLongshot: true }
+  }
+  if (winPct >= 0.58) {
+    return { label: '📊 High Probability Edge', isLongshot: false }
+  }
+  return { label: '📈 Value Edge', isLongshot: false }
+}
