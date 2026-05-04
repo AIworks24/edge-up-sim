@@ -303,7 +303,12 @@ function CustomParamsModal({
 
 // ── GameSummaryCard ───────────────────────────────────────────────────────────
 
-function GameSummaryCard({ summary, onClick }: { summary: GameSummary; onClick: () => void }) {
+function GameSummaryCard({ summary, onClick, onTrack, isTracked }: {
+  summary:   GameSummary
+  onClick:   () => void
+  onTrack:   (id: string) => void
+  isTracked: boolean
+}) {
   const tp       = summary.recommended_line?.top_pick
   const ET       = 'America/New_York'
   const gameDate = new Date(summary.game_time)
@@ -313,47 +318,44 @@ function GameSummaryCard({ summary, onClick }: { summary: GameSummary; onClick: 
   const timeET   = new Intl.DateTimeFormat('en-US', { timeZone: ET, hour: '2-digit', minute: '2-digit' }).format(gameDate)
   const dateStr  = isToday
     ? `Today · ${timeET} ET`
-    : new Intl.DateTimeFormat('en-US', { timeZone: ET, weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(gameDate) + ' ET'
+    : new Intl.DateTimeFormat('en-US', { timeZone: ET, weekday: 'short', month: 'short', day: 'numeric' }).format(gameDate) + ` · ${timeET} ET`
+
+  const odds    = parseOdds(summary.odds_data)
+  const hasOdds = odds.spread || odds.total || odds.moneyline
 
   return (
-    <button
+    // ── outer div (not button) so inner Track <button> is valid HTML ──
+    <div
       onClick={onClick}
-      className="w-full text-left bg-slate-800/50 backdrop-blur-xl border border-white/10 hover:border-blue-500/40 hover:bg-slate-800/80 rounded-2xl p-5 transition group"
+      className="group w-full text-left p-4 bg-slate-800/60 border border-white/8 rounded-2xl hover:border-blue-500/40 hover:bg-slate-800/80 transition cursor-pointer"
     >
-      {/* Top row */}
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="min-w-0">
-          <p className="text-xs text-gray-500 mb-0.5">{dateStr}</p>
-          <p className="text-sm font-bold text-white leading-tight">
-            {summary.away_team} <span className="text-gray-500 font-normal">@</span> {summary.home_team}
-          </p>
+      {/* Header row */}
+      <div className="flex items-start justify-between gap-3 mb-2">
+        <div className="flex-1 min-w-0">
+          <div className="font-bold text-white text-sm leading-tight">
+            {summary.away_team} @ {summary.home_team}
+          </div>
+          <div className="text-xs text-gray-500 mt-0.5">{dateStr}</div>
         </div>
-        <div className="flex-shrink-0 text-right">
-          <p className={`text-lg font-black ${edgeColor(summary.edge_score)}`}>
-            {summary.edge_score >= 0 ? '+' : ''}{summary.edge_score?.toFixed(1)}%
-          </p>
+        <div className="flex flex-col items-end gap-1 shrink-0">
           <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${edgeBadgeCss(summary.edge_tier)}`}>
             {summary.edge_tier}
+          </span>
+          <span className={`text-sm font-black ${edgeColor(summary.edge_score)}`}>
+            {summary.edge_score >= 0 ? '+' : ''}{summary.edge_score.toFixed(1)}%
           </span>
         </div>
       </div>
 
       {/* Top pick label */}
       {tp?.label && (
-        <div className="flex items-center gap-2 mb-2">
-          <Target className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
-          <span className="text-xs font-semibold text-blue-300">{tp.label}</span>
-          {tp.win_pct != null && (
-            <span className="text-xs text-gray-500">{tp.win_pct?.toFixed(1)}% win prob</span>
-          )}
+        <div className="text-xs font-semibold text-blue-300 mb-2">
+          ★ {tp.label}
         </div>
       )}
 
-      {/* AI analysis preview */}
-      <p className="text-xs text-gray-400 leading-relaxed line-clamp-2 mb-3">{summary.ai_analysis}</p>
-
-      {/* Fair vs market lines */}
-      <div className="flex items-center gap-4 text-xs text-gray-500 mb-3">
+      {/* Fair vs market values */}
+      <div className="flex flex-wrap gap-3 text-xs text-gray-500 mb-2">
         {summary.fair_spread != null && summary.market_spread != null && (
           <span>Spread: Fair <span className="text-blue-300">{summary.fair_spread > 0 ? '+' : ''}{summary.fair_spread?.toFixed(1)}</span> vs mkt <span className="text-white">{summary.market_spread > 0 ? '+' : ''}{summary.market_spread}</span></span>
         )}
@@ -373,14 +375,28 @@ function GameSummaryCard({ summary, onClick }: { summary: GameSummary; onClick: 
         </ul>
       )}
 
-      {/* CTA */}
-      <div className="flex items-center justify-between">
+      {/* Footer row: CTA + Track button */}
+      <div className="flex items-center justify-between mt-1">
         <span className="text-xs text-gray-600">{summary.confidence_score?.toFixed(0)}% confidence</span>
-        <span className="text-xs text-blue-400 group-hover:text-blue-300 flex items-center gap-1">
-          Run Full Analysis <TrendingUp className="w-3 h-3" />
-        </span>
+        <div className="flex items-center gap-2">
+          {/* Track button — stopPropagation prevents triggering the modal */}
+          <button
+            onClick={e => { e.stopPropagation(); onTrack(summary.id) }}
+            className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg border transition font-medium ${
+              isTracked
+                ? 'bg-blue-500/20 border-blue-500/40 text-blue-300'
+                : 'bg-white/5 border-white/10 text-gray-500 hover:text-gray-300 hover:bg-white/10'
+            }`}
+          >
+            <Target className="w-3 h-3" />
+            {isTracked ? 'Tracked' : 'Track'}
+          </button>
+          <span className="text-xs text-blue-400 group-hover:text-blue-300 flex items-center gap-1">
+            Full Analysis <TrendingUp className="w-3 h-3" />
+          </span>
+        </div>
       </div>
-    </button>
+    </div>
   )
 }
 
@@ -447,6 +463,7 @@ export default function SimulatePage() {
   const [simulating, setSimulating]       = useState(false)
   const [prediction, setPrediction]       = useState<any>(null)
   const [error, setError]                 = useState('')
+  const [trackedIds, setTrackedIds]       = useState<Set<string>>(new Set())
 
   // ── Auth ──────────────────────────────────────────────────────────────
   useEffect(() => { checkAuth() }, [])
@@ -589,6 +606,26 @@ export default function SimulatePage() {
     setModalGame(null)
   }
 
+  async function handleTrack(summaryId: string) {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      const res = await fetch('/api/predictions/track-summary', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ summary_id: summaryId }),
+      })
+      if (res.ok) {
+        setTrackedIds(prev => new Set([...prev, summaryId]))
+      }
+    } catch (e) {
+      console.error('[track]', e)
+    }
+  }
+
   // ── Loading screen ────────────────────────────────────────────────────
   if (loading) return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center">
@@ -713,6 +750,8 @@ export default function SimulatePage() {
                       key={s.id}
                       summary={s}
                       onClick={() => setModalGame(s)}
+                      onTrack={handleTrack}
+                      isTracked={trackedIds.has(s.id)}
                     />
                   ))}
                 </div>

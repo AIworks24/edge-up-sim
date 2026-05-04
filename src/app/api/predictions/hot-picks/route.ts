@@ -28,6 +28,7 @@ export async function GET(req: NextRequest) {
       `)
       .eq('is_daily_pick', true)
       .gte('created_at', `${today}T00:00:00.000Z`)
+      .not('market_spread', 'is', null)
       .order('daily_pick_rank', { ascending: true })
       .limit(5)
 
@@ -65,7 +66,16 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ picks: [] })
     }
 
-    return NextResponse.json({ picks: topToday || [], source: 'auto' })
+    // Dedup by game (same game can have game_summary AND user_simulation rows)
+    const seenGames = new Set<string>()
+    const dedupedToday = (topToday || []).filter((p: any) => {
+      const key = `${p.home_team}|${p.away_team}`
+      if (seenGames.has(key)) return false
+      seenGames.add(key)
+      return true
+    })
+
+    return NextResponse.json({ picks: dedupedToday, source: 'auto' })
 
   } catch (err: any) {
     console.error('[HOT PICKS API] Error:', err)

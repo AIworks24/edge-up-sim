@@ -168,25 +168,9 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      // ── Mark top 3 by edge_score as is_daily_pick ─────────────────────
-      // This feeds the Hot Picks feed on the dashboard
-      const { data: topPicks } = await supabaseAdmin
-        .from('ai_predictions')
-        .select('id, edge_score')
-        .eq('prediction_type', 'game_summary')
-        .gte('created_at', `${today}T00:00:00.000Z`)
-        .order('edge_score', { ascending: false })
-        .limit(3)
-
-      if (topPicks?.length) {
-        for (let i = 0; i < topPicks.length; i++) {
-          await supabaseAdmin.from('ai_predictions').update({
-            is_daily_pick:  true,
-            daily_pick_rank: i + 1,
-          }).eq('id', topPicks[i].id)
-        }
-        console.log(`[generate-summaries] Marked ${topPicks.length} as daily picks`)
-      }
+      // is_daily_pick marking is handled exclusively by /api/cron/generate-hot-picks
+      // to avoid conflicts between the two crons.
+      
 
       // ── Mark batch complete ────────────────────────────────────────────
       await supabaseAdmin.from('simulation_batch_runs').update({

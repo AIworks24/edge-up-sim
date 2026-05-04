@@ -48,6 +48,7 @@ export async function GET(req: NextRequest) {
       was_correct, actual_winner, actual_score,
       user_feedback, odds_snapshot,
       user_placed_bet, bet_placed_at, custom_simulation_params
+      full_response
     `)
     .eq('requested_by', user.id)
     .order('created_at', { ascending: false })

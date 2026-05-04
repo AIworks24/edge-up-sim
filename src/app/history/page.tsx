@@ -90,6 +90,7 @@ function BetTrackedStats({ stats }: { stats: { totalTracked: number; pending: nu
 // ── Expandable simulation card ────────────────────────────────────────────────
 function SimCard({ pred, onToggleBet, isUpdating }: { pred: any; onToggleBet?: (id: string, placed: boolean) => void; isUpdating?: boolean }) {
   const [open, setOpen] = useState(false)
+  const [showFullAnalysis, setShowFullAnalysis] = useState(false)
   const [betPlaced, setBetPlaced] = useState<boolean>(pred.user_placed_bet ?? false)
   const tp      = pred.recommended_line?.top_pick
   const isBet   = (pred.edge_score ?? 0) >= 20
@@ -259,6 +260,65 @@ function SimCard({ pred, onToggleBet, isUpdating }: { pred: any; onToggleBet?: (
             <p className="text-xs text-gray-600">
               Game: {fmtDate(pred.game_time)}
             </p>
+          )}
+
+          {/* Full Analysis toggle — only if full_response exists with bet sections */}
+          {pred.full_response?.spread && (
+            <div className="mt-3 pt-3 border-t border-white/5">
+              <button
+                onClick={e => { e.stopPropagation(); setShowFullAnalysis(s => !s) }}
+                className="text-xs font-semibold text-blue-400 hover:text-blue-300 transition flex items-center gap-1"
+              >
+                {showFullAnalysis ? '▲ Hide Full Analysis' : '▼ View Full Analysis'}
+              </button>
+
+              {showFullAnalysis && (
+                <div className="mt-3 space-y-2">
+                  {/* Projected Score */}
+                  {pred.full_response.projected_score && (
+                    <div className="flex gap-4 text-sm text-gray-300 bg-slate-700/30 rounded-lg px-3 py-2 mb-3">
+                      <span className="text-gray-500">Projected:</span>
+                      <span className="font-bold">{pred.home_team} {pred.full_response.projected_score.home}</span>
+                      <span className="text-gray-500">–</span>
+                      <span className="font-bold">{pred.away_team} {pred.full_response.projected_score.away}</span>
+                    </div>
+                  )}
+
+                  {/* Bet Sections */}
+                  {[
+                    pred.full_response.spread?.home,
+                    pred.full_response.total?.over,
+                    pred.full_response.moneyline?.home,
+                  ].filter(Boolean).map((bet: any, i: number) => {
+                    const verdictColor =
+                      bet.verdict === 'BET'  ? 'text-green-300 bg-green-900/30 border-green-500/40' :
+                      bet.verdict === 'LEAN' ? 'text-yellow-300 bg-yellow-900/20 border-yellow-500/30' :
+                                               'text-gray-400 bg-gray-800/30 border-gray-600/20'
+                    const isBest = pred.full_response?.top_pick?.bet_category === (['spread','over_under','moneyline'][i])
+                    return (
+                      <div key={i} className={`rounded-xl p-3 border text-xs ${isBest ? 'bg-green-900/10 border-green-500/30' : 'bg-slate-700/20 border-white/5'}`}>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center gap-2">
+                            {isBest && <span className="text-yellow-300 font-bold">★ BEST</span>}
+                            <span className="font-semibold text-white">{bet.label}</span>
+                            <span className={`px-1.5 py-0.5 rounded-full border font-bold ${verdictColor}`}>{bet.verdict}</span>
+                          </div>
+                          <span className={`font-black text-sm ${bet.edge_pct >= 20 ? 'text-green-300' : bet.edge_pct >= 12 ? 'text-yellow-300' : 'text-gray-400'}`}>
+                            {bet.edge_pct >= 0 ? '+' : ''}{bet.edge_pct?.toFixed(1)}%
+                          </span>
+                        </div>
+                        <div className="flex gap-3 text-gray-400 mb-1.5">
+                          <span>Win: <span className="text-gray-200">{bet.win_pct?.toFixed(1)}%</span></span>
+                          <span>Fair: <span className="text-gray-200">{bet.fair_line}</span></span>
+                          <span>Odds: <span className="text-gray-200">{bet.odds > 0 ? '+' : ''}{bet.odds}</span></span>
+                        </div>
+                        {bet.analysis && <p className="text-gray-500 leading-relaxed">{bet.analysis}</p>}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}

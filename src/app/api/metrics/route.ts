@@ -19,6 +19,9 @@ export async function GET(req: NextRequest) {
       'sport, was_correct, edge_score, confidence_score, edge_tier, ' +
       'prediction_type, is_daily_pick, created_at'
     )
+    // game_summary rows are system-generated cron outputs, not tracked user picks.
+    // Excluding them keeps win rate, ROI, and avg edge meaningful.
+    .not('prediction_type', 'eq', 'game_summary')
 
   if (scope === 'hot_picks') {
     query = query.eq('is_daily_pick', true)
