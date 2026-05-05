@@ -197,9 +197,6 @@ function CustomParamsModal({
                 <span className={`text-sm font-black ${edgeColor(summary.edge_score)}`}>
                   {summary.edge_score >= 0 ? '+' : ''}{summary.edge_score?.toFixed(1)}% Edge
                 </span>
-                <span className="text-xs text-gray-500">
-                  {summary.confidence_score?.toFixed(0)}% confidence
-                </span>
               </div>
             )}
           </div>
@@ -377,8 +374,7 @@ function GameSummaryCard({ summary, onClick, onTrack, isTracked }: {
       )}
 
       {/* Footer row: CTA + Track button */}
-      <div className="flex items-center justify-between mt-1">
-        <span className="text-xs text-gray-600">{summary.confidence_score?.toFixed(0)}% confidence</span>
+      <div className="flex items-center justify-end mt-1">
         <div className="flex items-center gap-2">
           {/* Track button — stopPropagation prevents triggering the modal */}
           <button
