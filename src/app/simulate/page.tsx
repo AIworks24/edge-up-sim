@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import { SimResultCard } from '@/components/simulation/SimResultCard'
 import { formatTotal } from '@/lib/utils/format'
+import { AppNav } from '@/components/layout/AppNav'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -638,20 +639,16 @@ export default function SimulatePage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
 
-      {/* Sticky header */}
-      <header className="border-b border-white/10 bg-slate-900/80 backdrop-blur-xl sticky top-0 z-50">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <Link href="/dashboard" className="flex items-center space-x-2 text-gray-400 hover:text-white transition">
-            <ArrowLeft className="w-5 h-5" /><span className="text-sm">Dashboard</span>
-          </Link>
-          {profile && (
-            <div className="text-sm text-gray-400">
-              {profile.daily_simulation_count || 0}
-              /{(profile.daily_simulation_limit || 3) + (profile.monthly_simulation_rollover || 0)} analyses today
-            </div>
-          )}
-        </div>
-      </header>
+      <AppNav
+        user={user}
+        profile={profile}
+        rightExtra={profile && (
+          <div className="text-sm text-gray-400 hidden sm:block">
+            {profile.daily_simulation_count || 0}
+            /{(profile.daily_simulation_limit || 3) + (profile.monthly_simulation_rollover || 0)} analyses today
+          </div>
+        )}
+      />
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
 

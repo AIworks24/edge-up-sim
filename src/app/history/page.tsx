@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { formatTotal } from '@/lib/utils/format'
 import { softCapEdgeScore } from '@/lib/ai/edge-classifier'
+import { AppNav } from '@/components/layout/AppNav'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function edgeBadge(tier: string) {
@@ -339,6 +340,8 @@ export default function HistoryPage() {
   })
   const [trackedStats, setTrackedStats] = useState<any>(null)
   const [updatingIds, setUpdatingIds]   = useState<Set<string>>(new Set())
+  const [user,    setUser]    = useState<any>(null)
+  const [profile, setProfile] = useState<any>(null)
 
   useEffect(() => { loadHistory() }, [filter])
 
@@ -347,6 +350,14 @@ export default function HistoryPage() {
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) { router.push('/login'); return }
+
+      setUser(session.user)
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('full_name, subscription_tier, subscription_status')
+        .eq('id', session.user.id)
+        .single()
+      if (profileData) setProfile(profileData)
 
       // Call server-side API route — uses supabaseAdmin, bypasses RLS
       const res = await fetch(
@@ -425,26 +436,7 @@ export default function HistoryPage() {
   return (
     <div className="min-h-screen bg-slate-900 text-white">
       {/* Header */}
-      <div className="border-b border-white/5 bg-slate-900/80 backdrop-blur sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/dashboard" className="p-2 hover:bg-white/10 rounded-lg transition">
-              <ArrowLeft className="w-5 h-5" />
-            </Link>
-            <div>
-              <h1 className="text-lg font-bold text-white">Simulation History</h1>
-              <p className="text-xs text-gray-500">Your predictions and today's hot picks</p>
-            </div>
-          </div>
-          <Link
-            href="/simulate"
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-xl text-sm font-bold transition"
-          >
-            <Zap className="w-4 h-4" />
-            New Sim
-          </Link>
-        </div>
-      </div>
+      <AppNav user={user} profile={profile} />
 
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-8">
 
