@@ -9,6 +9,7 @@ import {
   Save, ChevronRight, Zap, AlertTriangle,
   Check, RefreshCw
 } from 'lucide-react'
+import { AppNav } from '@/components/layout/AppNav'
 
 const SPORTS = [
   { key: 'nfl', label: 'NFL Football' },
@@ -196,47 +197,7 @@ export default function SettingsPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
       {/* Header */}
-      <header className="bg-slate-900/50 backdrop-blur-xl border-b border-white/10 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-8">
-              <Link href="/dashboard" className="flex items-center space-x-3">
-                <div className="w-9 h-9 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-                  <Zap className="w-5 h-5 text-white" />
-                </div>
-                <span className="text-lg font-bold text-white">Edge Up Sim</span>
-              </Link>
-              <nav className="hidden md:flex items-center space-x-1">
-                {[
-                  { href: '/dashboard', label: 'Dashboard' },
-                  { href: '/simulate', label: 'Simulate' },
-                  { href: '/history', label: 'History' },
-                  { href: '/settings', label: 'Settings' }
-                ].map(item => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                      item.href === '/settings'
-                        ? 'text-white bg-white/10'
-                        : 'text-gray-400 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    {item.label}
-                  </Link>
-                ))}
-              </nav>
-            </div>
-            <button
-              onClick={handleSignOut}
-              className="flex items-center gap-2 px-3 py-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition text-sm"
-            >
-              <LogOut className="w-4 h-4" />
-              Sign Out
-            </button>
-          </div>
-        </div>
-      </header>
+      <AppNav user={user} profile={profile} />
 
       {/* Page Content */}
       <main className="max-w-5xl mx-auto px-4 py-10 sm:px-6 lg:px-8">
