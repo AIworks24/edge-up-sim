@@ -93,6 +93,9 @@ export function getEdgeType(
   betCategory: 'spread' | 'total' | 'moneyline',
   winPct: number
 ): { label: string; isLongshot: boolean } {
+  if (betCategory === 'moneyline' && winPct < 0.35) {
+    return { label: '⚠️ High Variance Play', isLongshot: true }
+  }
   if (betCategory === 'moneyline' && winPct < 0.45) {
     return { label: '⚠️ Longshot Value Edge', isLongshot: true }
   }

@@ -113,8 +113,25 @@ function toFairML(winPct: number): number {
 }
 
 function buildBetEdge(side: BetSide, label: string, winPct: number, odds: number): BetEdge {
-  const ev       = calcEV(winPct, odds)
-  const edge_pct = ev * 100
+  const ev      = calcEV(winPct, odds)
+  let   edge_pct = ev * 100
+
+  // Longshot ML dampening — large positive odds explode EV% on small prob gaps.
+  // Apply reduction factor before verdict and before best-bet selection.
+  // Only applies to ML sides; spread/total odds are always near -110.
+  if ((side === 'ml_home' || side === 'ml_away') && odds > 0) {
+    if      (odds > 400) edge_pct *= 0.50   // extreme longshot → halve the edge
+    else if (odds > 250) edge_pct *= 0.70   // heavy underdog  → 30% reduction
+  }
+
+  // Verdict — cap longshots (win prob < 35%) at LEAN regardless of edge score
+  const isLongshot = winPct < 0.35
+  const verdict: 'BET' | 'LEAN' | 'PASS' =
+    isLongshot        ? (edge_pct >= 10 ? 'LEAN' : 'PASS')
+    : edge_pct >= 20  ? 'BET'
+    : edge_pct >= 10  ? 'LEAN'
+    : 'PASS'
+
   return {
     side,
     label,
@@ -124,7 +141,7 @@ function buildBetEdge(side: BetSide, label: string, winPct: number, odds: number
     odds,
     profit_per_dollar: profitPerDollar(odds),
     breakeven_pct:     impliedProb(odds),
-    verdict: edge_pct >= 20 ? 'BET' : edge_pct >= 10 ? 'LEAN' : 'PASS',
+    verdict,
   }
 }
 
