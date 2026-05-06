@@ -514,7 +514,10 @@ async function storePrediction(req: SimulationRequest, sim: CBBSimResults, outpu
       risk_assessment:      output.top_pick?.analysis || 'No risk assessment',
       recommended_bet_type: (() => {
         const cat = output.top_pick?.bet_category || 'spread'
-        return cat === 'total' ? 'over_under' : cat
+        if (['ml_home', 'ml_away', 'moneyline'].includes(cat)) return 'moneyline'
+        if (['over', 'under', 'total', 'over_under'].includes(cat)) return 'over_under'
+        if (['spread_home', 'spread_away', 'spread'].includes(cat)) return 'spread'
+        return 'spread'
       })(),
       recommended_line:     { top_pick: output.top_pick ?? {} },
       odds_snapshot:        { spread: req.spread_home, total: req.total, ml_home: req.odds_ml_home, ml_away: req.odds_ml_away },
