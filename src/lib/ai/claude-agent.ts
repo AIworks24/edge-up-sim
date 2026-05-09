@@ -162,6 +162,19 @@ export async function runGameSimulation(req: SimulationRequest): Promise<Simulat
     aiOutput = buildFallback(sim, req)
   }
 
+  // Apply soft cap to all per-bet edge_pct fields so Full Analysis
+  // displays match Summary card scores — raw values stay in sim_results only
+  const capEdge = (section: any) => {
+    if (section?.edge_pct != null) section.edge_pct = softCapEdgeScore(section.edge_pct)
+  }
+  capEdge(aiOutput.spread?.home)
+  capEdge(aiOutput.spread?.away)
+  capEdge(aiOutput.total?.over)
+  capEdge(aiOutput.total?.under)
+  capEdge(aiOutput.moneyline?.home)
+  capEdge(aiOutput.moneyline?.away)
+  capEdge(aiOutput.top_pick)
+  
   // Expand all stat acronyms in every analysis text field
   if (aiOutput.game_summary)          aiOutput.game_summary = expandAcronyms(aiOutput.game_summary)
   if (aiOutput.headline)              aiOutput.headline = expandAcronyms(aiOutput.headline)
