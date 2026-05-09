@@ -274,7 +274,7 @@ export function SimResultCard({ result }: SimResultCardProps) {
         </div>
       </div>
 
-      {/* ── Model Data (collapsed) ──────────────────────────────────────── */}
+      {/* ── Model Data (collapsed) ──────────────────────────────────────── 
       {sim && (
         <div className="px-6 pb-6">
           <button
@@ -294,7 +294,7 @@ export function SimResultCard({ result }: SimResultCardProps) {
             </div>
           )}
         </div>
-      )}
+      )} */}
 
     </div>
   )
