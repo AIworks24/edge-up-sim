@@ -116,9 +116,12 @@ function parseGameEntry(entry: any): ParsedOdds {
     // ── Moneyline ──────────────────────────────────────────────────────────
     const mlEntry = latestFull(src.moneyLines || [], 'moneyLine')
     if (mlEntry) {
-      const ml = mlEntry.moneyLine
-      if (ml.homeLine?.american  != null) homeMl.push(ml.homeLine.american)
-      if (ml.awayLine?.american  != null) awayMl.push(ml.awayLine.american)
+      const ml      = mlEntry.moneyLine
+      const homeAmer = ml.homeLine?.american
+      const awayAmer = ml.awayLine?.american
+      // Valid American odds must be ≤ -100 or ≥ 100 — reject spread-range garbage (e.g. 7.5)
+      if (homeAmer != null && (homeAmer <= -100 || homeAmer >= 100)) homeMl.push(homeAmer)
+      if (awayAmer != null && (awayAmer <= -100 || awayAmer >= 100)) awayMl.push(awayAmer)
     }
   }
 
